@@ -1,0 +1,189 @@
+{
+  "overview_result": "After 160,000 training episodes, the saved policy won 94.23% of 4,000 test games against a random opponent and drew all 4,000 games against minimax. It recorded 0 losses across 12,000 final evaluation games. A separate adversarial game-tree audit found zero loss probability from the empty board for both player roles under the saved greedy policy.",
+  "reward_description": "Win +1.0; draw +0.3; loss -1.0; ongoing transition 0. Terminal outcome is measured from the learner's perspective.",
+  "gamma": "0.97",
+  "libraries": "Python standard library for the learning engine; NumPy 2.3.5 and Matplotlib 3.10.6 for numerical support and plots; notebook display tools for interactive outputs.",
+  "tactical_description": "Take an immediate win; otherwise block an immediate opponent win, take the center, take a corner or select a remaining edge. It does not perform full game-tree search.",
+  "hyper_rows": [
+    [
+      "Learning rate \u03b1",
+      "0.15 (constant)"
+    ],
+    [
+      "Discount factor \u03b3",
+      "0.97"
+    ],
+    [
+      "Exploration rate \u03b5",
+      "Linear 1.00 to 0.03 during the first 136,000 episodes; 0.03 thereafter"
+    ],
+    [
+      "Number of episodes",
+      "160,000 (80,000 as X and 80,000 as O)"
+    ],
+    [
+      "Rewards",
+      "Win +1; draw +0.3; loss -1; ongoing 0"
+    ],
+    [
+      "Opponent mixture",
+      "Per move: random 25%, tactical 15%, minimax 60%"
+    ],
+    [
+      "Seeds",
+      "Training 42; environment 43; checkpoint 2026; final evaluation 1002026"
+    ],
+    [
+      "Logging and checkpoints",
+      "1,000-episode training windows; evaluate every 5,000 episodes"
+    ],
+    [
+      "Evaluation games",
+      "Checkpoint: 200 per role/opponent; final: 2,000 per role/opponent"
+    ],
+    [
+      "Greedy ties and initial Q",
+      "Uniform legal ties within 1e-12; unvisited values start at 0"
+    ]
+  ],
+  "training_description": "Training ran locally for 160,000 episodes with seed 42. The learner alternated X and O on successive episodes. On each opponent move, a new policy was sampled independently from the fixed mixture of 25% random, 15% tactical and 60% minimax. The run learned 627 canonical decision states and exported 4,520 board orientations for the browser.",
+  "evaluation_protocol": "The untrained baseline uses an all-zero Q table with uniform random selection among tied legal actions. Both baseline and final policy were tested with epsilon zero in 2,000 games per role against each of three opponents: 12,000 games per policy. Final seed 1002026 differs from training and checkpoint seeds. The opponents are held fixed within each evaluation condition and Q values are not updated.",
+  "screenshots": [],
+  "execution_status": "The saved 160,000-episode training and final evaluation were executed locally on Windows. The self-contained browser game is opened from the local project folder. Notebook execution and interface checks are documented in the project verification artifacts.",
+  "results_intro": "Table values below come directly from artifacts/evaluation.json. Each row pools 2,000 games as X and 2,000 as O. The same protocol evaluates the zero-table baseline and the saved trained policy.",
+  "result_rows": [
+    [
+      "Baseline",
+      "Random",
+      "4,000",
+      "44.73",
+      "11.40",
+      "43.88",
+      "0.0427"
+    ],
+    [
+      "Baseline",
+      "Tactical",
+      "4,000",
+      "0.73",
+      "9.22",
+      "90.05",
+      "-0.8656"
+    ],
+    [
+      "Baseline",
+      "Minimax",
+      "4,000",
+      "0.00",
+      "12.55",
+      "87.45",
+      "-0.8368"
+    ],
+    [
+      "Trained",
+      "Random",
+      "4,000",
+      "94.23",
+      "5.78",
+      "0.00",
+      "0.9596"
+    ],
+    [
+      "Trained",
+      "Tactical",
+      "4,000",
+      "16.90",
+      "83.10",
+      "0.00",
+      "0.4183"
+    ],
+    [
+      "Trained",
+      "Minimax",
+      "4,000",
+      "0.00",
+      "100.00",
+      "0.00",
+      "0.3000"
+    ]
+  ],
+  "role_rows": [
+    [
+      "X",
+      "Random",
+      "2,000",
+      "1,947",
+      "53",
+      "0",
+      "100.00"
+    ],
+    [
+      "O",
+      "Random",
+      "2,000",
+      "1,822",
+      "178",
+      "0",
+      "100.00"
+    ],
+    [
+      "X",
+      "Tactical",
+      "2,000",
+      "676",
+      "1,324",
+      "0",
+      "100.00"
+    ],
+    [
+      "O",
+      "Tactical",
+      "2,000",
+      "0",
+      "2,000",
+      "0",
+      "100.00"
+    ],
+    [
+      "X",
+      "Minimax",
+      "2,000",
+      "0",
+      "2,000",
+      "0",
+      "100.00"
+    ],
+    [
+      "O",
+      "Minimax",
+      "2,000",
+      "0",
+      "2,000",
+      "0",
+      "100.00"
+    ]
+  ],
+  "results_interpretation": "Against random play, win rate increased from 44.73% to 94.23%. Against minimax, the baseline lost 87.45% of games, while the trained policy drew all games. The trained policy's average terminal reward was 0.9596, 0.4183 and 0.3000 against random, tactical and minimax opponents respectively.",
+  "reward_plot": "C:\\Users\\Shreejay\\Desktop\\RL_LABCA\\artifacts\\plots\\reward_vs_episode.png",
+  "reward_caption": "Figure 3. Mean terminal reward during training, measured in non-overlapping windows of 1,000 episodes.",
+  "reward_analysis": "The first training window averaged -0.6682 reward and the final window averaged 0.5165. These are exploratory training games against a per-move mixture, so they should not be equated with the final greedy evaluation. Total training reward was -4,799.3; early exploratory losses still contribute to this cumulative total.",
+  "success_plot": "C:\\Users\\Shreejay\\Desktop\\RL_LABCA\\artifacts\\plots\\success_vs_episode.png",
+  "success_caption": "Figure 4. Greedy checkpoint non-loss rate; 400 games per opponent at each checkpoint, using seed 2026.",
+  "steps_plot": "C:\\Users\\Shreejay\\Desktop\\RL_LABCA\\artifacts\\plots\\steps_vs_episode.png",
+  "steps_caption": "Figure 5. Mean board moves and agent decisions during training, summarized over 1,000 episodes.",
+  "curve_analysis": "Training non-loss rate rose from 21.0% to 97.0%. Mean game length changed from 7.097 to 8.145 board moves, consistent with fewer early losses and more full-board draws. Longer games are not automatically worse performance in this task.",
+  "analysis": "At the first 5,000-episode checkpoint, non-loss rates were 99.0% against random, 100.0% against tactical and 100.0% against minimax. Final checkpoint rates were 100.0%, 100.0% and 100.0%. The policy learned to avoid defeat and exploit weak responses. A nonzero exploration floor and stochastic opponent keep training losses and temporal difference error above zero.",
+  "audit_analysis": "The exact adversarial audit explores every opponent response reachable under the saved greedy policy, averaging all maximal-Q ties. It visited 132 learner states as X and 353 as O, with no unseen learner states. Worst-case loss probability was zero for both roles. This stronger result applies from the empty board with this policy and tie rule; it is not a claim about arbitrary forced board positions or exploratory modes.",
+  "conclusion": "A tabular Q-learning agent was implemented and trained for 160,000 games using legal actions, agent-perspective states, symmetry sharing and two-move transitions. The trained greedy policy won 94.23% against random play, drew every sampled minimax game and lost none of 12,000 final test games. An exact adversarial audit also found no losing path from the empty board for either role under the saved greedy policy. These results demonstrate effective learned play within the stated evaluation scope.",
+  "provenance": "Experiment timestamp: 2026-10-04T10:35:49.798879+00:00. Runtime: Python 3.13.9 on Windows-11-10.0.26200-SP0. The recorded training loop time was 9.53 seconds; this excludes baseline evaluation, final evaluation, plotting, report creation and user interface verification.",
+  "run_commands": "# From the RL_LABCA project folder\npython -m pip install -r requirements.txt\npython -m unittest discover -s tests -v\npython -m tictactoe.train --episodes 160000 --seed 42\n\n# Open TicTacToe_Offline.html by double-clicking it.\n# Open notebooks/TicTacToe_Q_Learning.ipynb in Jupyter.\n",
+  "update_code": "if state[action] != \"0\":\n    raise ValueError(\"Cannot learn an illegal action.\")\nkey, permutation = canonicalize(state)\nvalues = self.q.setdefault(key, [0.0] * 9)\ncanonical_action = permutation[action]\ntarget = reward\nif not done:\n    if next_state is None:\n        raise ValueError(\"A nonterminal update needs a next state.\")\n    next_values = self.values(next_state)\n    actions = [a for a, cell in enumerate(next_state) if cell == \"0\"]\n    if not actions:\n        raise ValueError(\"A nonterminal next state needs a legal action.\")\n    target += self.gamma * max(next_values[a] for a in actions)\ntd_error = target - values[canonical_action]\nvalues[canonical_action] += self.alpha * td_error\nreturn abs(td_error)",
+  "sample_output_intro": "The following compact output reproduces values from the saved evaluation artifact. Outcomes are shown as wins / draws / losses for the trained policy, pooling the two player roles.",
+  "sample_output": "{\n  \"episodes\": 160000,\n  \"canonical_states\": 627,\n  \"exported_states\": 4520,\n  \"trained_outcomes\": {\n    \"random\": {\n      \"wins\": 3769,\n      \"draws\": 231,\n      \"losses\": 0\n    },\n    \"tactical\": {\n      \"wins\": 676,\n      \"draws\": 3324,\n      \"losses\": 0\n    },\n    \"minimax\": {\n      \"wins\": 0,\n      \"draws\": 4000,\n      \"losses\": 0\n    }\n  },\n  \"worst_case_loss_probability\": {\n    \"X\": 0.0,\n    \"O\": 0.0\n  }\n}",
+  "verification": [
+    "Environment tests check game rules, terminal states and legal actions.",
+    "Agent tests check terminal updates, legal bootstrapping, symmetry mapping and exported-policy behavior.",
+    "Final evaluation uses fresh seeds and disables exploration and Q-table updates.",
+    "The exact adversarial audit explores every opponent response reachable under the saved greedy policy from the empty board."
+  ]
+}

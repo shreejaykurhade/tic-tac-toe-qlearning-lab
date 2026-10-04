@@ -1,0 +1,366 @@
+{
+  "parameters": {
+    "episodes": 160000,
+    "seed": 42,
+    "alpha": 0.15,
+    "gamma": 0.97,
+    "epsilon_start": 1.0,
+    "epsilon_end": 0.03,
+    "epsilon_decay_fraction": 0.85,
+    "win_reward": 1.0,
+    "draw_reward": 0.3,
+    "loss_reward": -1.0,
+    "random_weight": 0.25,
+    "tactical_weight": 0.15,
+    "minimax_weight": 0.6,
+    "history_interval": 1000,
+    "evaluation_interval": 5000,
+    "checkpoint_games_per_role": 200,
+    "final_games_per_role": 2000,
+    "evaluation_seed": 2026
+  },
+  "training_elapsed_seconds": 9.530070500000875,
+  "created_utc": "2026-10-04T10:35:49.798879+00:00",
+  "python_version": "3.13.9",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "canonical_states": 627,
+  "exported_states": 4520,
+  "final_training_window": {
+    "episode": 160000,
+    "window_episodes": 1000,
+    "epsilon": 0.030000000000000027,
+    "average_reward": 0.516500000000005,
+    "cumulative_reward": -4799.30000003563,
+    "win_rate": 0.365,
+    "draw_rate": 0.605,
+    "loss_rate": 0.03,
+    "non_loss_rate": 0.97,
+    "average_board_moves": 8.145,
+    "average_agent_decisions": 4.132,
+    "mean_absolute_td_error": 0.10003778338577883,
+    "canonical_states": 627
+  },
+  "initial_training_window": {
+    "episode": 1000,
+    "window_episodes": 1000,
+    "epsilon": 0.9928747794117647,
+    "average_reward": -0.6682000000000005,
+    "cumulative_reward": -668.2000000000005,
+    "win_rate": 0.084,
+    "draw_rate": 0.126,
+    "loss_rate": 0.79,
+    "non_loss_rate": 0.21,
+    "average_board_moves": 7.097,
+    "average_agent_decisions": 3.389,
+    "mean_absolute_td_error": 0.2581379341651361,
+    "canonical_states": 385
+  },
+  "evaluation": {
+    "evaluation_seed": 1002026,
+    "games_per_role_per_opponent": 2000,
+    "policy": "epsilon=0, uniformly random maximal-Q ties; no search at inference",
+    "baseline": {
+      "random": {
+        "X": {
+          "games": 2000,
+          "wins": 1195,
+          "draws": 226,
+          "losses": 579,
+          "win_rate": 0.5975,
+          "draw_rate": 0.113,
+          "loss_rate": 0.2895,
+          "non_loss_rate": 0.7105,
+          "cumulative_reward": 683.8,
+          "average_reward": 0.3419,
+          "total_board_moves": 15267,
+          "average_board_moves": 7.6335
+        },
+        "O": {
+          "games": 2000,
+          "wins": 594,
+          "draws": 230,
+          "losses": 1176,
+          "win_rate": 0.297,
+          "draw_rate": 0.115,
+          "loss_rate": 0.588,
+          "non_loss_rate": 0.412,
+          "cumulative_reward": -513.0,
+          "average_reward": -0.2565,
+          "total_board_moves": 15266,
+          "average_board_moves": 7.633
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 1789,
+          "draws": 456,
+          "losses": 1755,
+          "win_rate": 0.44725,
+          "draw_rate": 0.114,
+          "loss_rate": 0.43875,
+          "non_loss_rate": 0.56125,
+          "cumulative_reward": 170.79999999999995,
+          "average_reward": 0.04269999999999999,
+          "total_board_moves": 30533,
+          "average_board_moves": 7.63325
+        }
+      },
+      "tactical": {
+        "X": {
+          "games": 2000,
+          "wins": 29,
+          "draws": 290,
+          "losses": 1681,
+          "win_rate": 0.0145,
+          "draw_rate": 0.145,
+          "loss_rate": 0.8405,
+          "non_loss_rate": 0.1595,
+          "cumulative_reward": -1565.0,
+          "average_reward": -0.7825,
+          "total_board_moves": 13497,
+          "average_board_moves": 6.7485
+        },
+        "O": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 79,
+          "losses": 1921,
+          "win_rate": 0.0,
+          "draw_rate": 0.0395,
+          "loss_rate": 0.9605,
+          "non_loss_rate": 0.0395,
+          "cumulative_reward": -1897.3,
+          "average_reward": -0.94865,
+          "total_board_moves": 11432,
+          "average_board_moves": 5.716
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 29,
+          "draws": 369,
+          "losses": 3602,
+          "win_rate": 0.00725,
+          "draw_rate": 0.09225,
+          "loss_rate": 0.9005,
+          "non_loss_rate": 0.0995,
+          "cumulative_reward": -3462.3,
+          "average_reward": -0.8655750000000001,
+          "total_board_moves": 24929,
+          "average_board_moves": 6.23225
+        }
+      },
+      "minimax": {
+        "X": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 440,
+          "losses": 1560,
+          "win_rate": 0.0,
+          "draw_rate": 0.22,
+          "loss_rate": 0.78,
+          "non_loss_rate": 0.22,
+          "cumulative_reward": -1428.0,
+          "average_reward": -0.714,
+          "total_board_moves": 14692,
+          "average_board_moves": 7.346
+        },
+        "O": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 62,
+          "losses": 1938,
+          "win_rate": 0.0,
+          "draw_rate": 0.031,
+          "loss_rate": 0.969,
+          "non_loss_rate": 0.031,
+          "cumulative_reward": -1919.4,
+          "average_reward": -0.9597,
+          "total_board_moves": 13270,
+          "average_board_moves": 6.635
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 0,
+          "draws": 502,
+          "losses": 3498,
+          "win_rate": 0.0,
+          "draw_rate": 0.1255,
+          "loss_rate": 0.8745,
+          "non_loss_rate": 0.1255,
+          "cumulative_reward": -3347.4,
+          "average_reward": -0.83685,
+          "total_board_moves": 27962,
+          "average_board_moves": 6.9905
+        }
+      }
+    },
+    "trained": {
+      "random": {
+        "X": {
+          "games": 2000,
+          "wins": 1947,
+          "draws": 53,
+          "losses": 0,
+          "win_rate": 0.9735,
+          "draw_rate": 0.0265,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 1962.9,
+          "average_reward": 0.98145,
+          "total_board_moves": 11736,
+          "average_board_moves": 5.868
+        },
+        "O": {
+          "games": 2000,
+          "wins": 1822,
+          "draws": 178,
+          "losses": 0,
+          "win_rate": 0.911,
+          "draw_rate": 0.089,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 1875.4,
+          "average_reward": 0.9377000000000001,
+          "total_board_moves": 13394,
+          "average_board_moves": 6.697
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 3769,
+          "draws": 231,
+          "losses": 0,
+          "win_rate": 0.94225,
+          "draw_rate": 0.05775,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 3838.3,
+          "average_reward": 0.9595750000000001,
+          "total_board_moves": 25130,
+          "average_board_moves": 6.2825
+        }
+      },
+      "tactical": {
+        "X": {
+          "games": 2000,
+          "wins": 676,
+          "draws": 1324,
+          "losses": 0,
+          "win_rate": 0.338,
+          "draw_rate": 0.662,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 1073.2,
+          "average_reward": 0.5366000000000001,
+          "total_board_moves": 16648,
+          "average_board_moves": 8.324
+        },
+        "O": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 2000,
+          "losses": 0,
+          "win_rate": 0.0,
+          "draw_rate": 1.0,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 600.0,
+          "average_reward": 0.3,
+          "total_board_moves": 18000,
+          "average_board_moves": 9.0
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 676,
+          "draws": 3324,
+          "losses": 0,
+          "win_rate": 0.169,
+          "draw_rate": 0.831,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 1673.1999999999998,
+          "average_reward": 0.41829999999999995,
+          "total_board_moves": 34648,
+          "average_board_moves": 8.662
+        }
+      },
+      "minimax": {
+        "X": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 2000,
+          "losses": 0,
+          "win_rate": 0.0,
+          "draw_rate": 1.0,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 600.0,
+          "average_reward": 0.3,
+          "total_board_moves": 18000,
+          "average_board_moves": 9.0
+        },
+        "O": {
+          "games": 2000,
+          "wins": 0,
+          "draws": 2000,
+          "losses": 0,
+          "win_rate": 0.0,
+          "draw_rate": 1.0,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 600.0,
+          "average_reward": 0.3,
+          "total_board_moves": 18000,
+          "average_board_moves": 9.0
+        },
+        "combined": {
+          "games": 4000,
+          "wins": 0,
+          "draws": 4000,
+          "losses": 0,
+          "win_rate": 0.0,
+          "draw_rate": 1.0,
+          "loss_rate": 0.0,
+          "non_loss_rate": 1.0,
+          "cumulative_reward": 1200.0,
+          "average_reward": 0.3,
+          "total_board_moves": 36000,
+          "average_board_moves": 9.0
+        }
+      }
+    },
+    "adversarial_audit": {
+      "X": {
+        "win_probability": 0.0,
+        "draw_probability": 1.0,
+        "loss_probability": 0.0,
+        "reachable_agent_states": 132,
+        "unseen_agent_states": 0,
+        "tree_nodes": 250,
+        "unbeatable_from_empty_board": true
+      },
+      "O": {
+        "win_probability": 0.0,
+        "draw_probability": 1.0,
+        "loss_probability": 0.0,
+        "reachable_agent_states": 353,
+        "unseen_agent_states": 0,
+        "tree_nodes": 657,
+        "unbeatable_from_empty_board": true
+      }
+    }
+  },
+  "methodology": {
+    "state": "9 cells relative to agent (0 empty, 1 self, 2 opponent)",
+    "transition": "agent action plus opponent response; next state belongs to same agent",
+    "symmetry": "8 rotations/reflections canonicalized during learning; raw states expanded for browser",
+    "opponent_mixture": "policy sampled independently for each opponent move",
+    "roles": "agent alternates X and O each episode",
+    "checkpoint_seed": 2026,
+    "final_seed": 1002026,
+    "baseline": "all Q-values zero, epsilon=0, uniform legal ties (random policy)",
+    "success_definition": "non-loss rate = (wins + draws) / games"
+  },
+  "library_versions": {
+    "numpy": "2.3.5",
+    "matplotlib": "3.10.6"
+  }
+}

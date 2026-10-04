@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101a1c">
+  <meta name="description" content="Play a real trained Q-learning Tic Tac Toe agent. See its action values, explore its policy, and learn how reinforcement learning works.">
+  <title>Zero Sum — A Q-learning playground</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="artifacts/model.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <a href="./" class="brand" aria-label="Zero Sum home"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ZERO SUM<span class="brand-period">.</span></span></a>
+      <nav class="header-nav" aria-label="Main navigation"><a class="nav-active" href="#play">Playground</a><a href="#learning" id="learn-link">How it learns <span aria-hidden="true">↗</span></a></nav>
+      <div class="model-badge" id="model-badge"><span class="status-dot"></span><span id="model-badge-text">Loading policy</span></div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div><div class="eyebrow"><span class="eyebrow-line"></span> THE REINFORCEMENT LEARNING PLAYGROUND</div><h1 id="page-title">Small board.<br><span>Big decisions.</span></h1></div>
+        <div class="intro-copy"><p>Nine squares. Thousands of lessons.<br>Play against an agent that learned<br>its strategy through experience.</p><div class="intro-tags"><span>Tabular Q-learning</span><span>Open source</span></div></div>
+      </section>
+
+      <section class="play-layout" id="play" aria-label="Tic Tac Toe game">
+        <div class="game-card">
+          <div class="game-card-header"><div class="game-label"><span class="live-icon" aria-hidden="true"></span> HUMAN <span class="vs">vs</span> MACHINE</div><span class="round-label" id="round-label">ROUND 01</span></div>
+          <div class="game-status" aria-live="polite" aria-atomic="true"><div class="turn-indicator" id="turn-indicator" aria-hidden="true">✕</div><div><h2 id="game-status">Getting the board ready</h2><p id="game-status-detail">Loading the learned Q-table…</p></div></div>
+          <div class="board-wrap">
+            <div class="board" id="board" aria-label="Tic Tac Toe board">
+              <button class="cell" data-index="0" aria-label="Row 1, column 1, empty"></button><button class="cell" data-index="1" aria-label="Row 1, column 2, empty"></button><button class="cell" data-index="2" aria-label="Row 1, column 3, empty"></button>
+              <button class="cell" data-index="3" aria-label="Row 2, column 1, empty"></button><button class="cell" data-index="4" aria-label="Row 2, column 2, empty"></button><button class="cell" data-index="5" aria-label="Row 2, column 3, empty"></button>
+              <button class="cell" data-index="6" aria-label="Row 3, column 1, empty"></button><button class="cell" data-index="7" aria-label="Row 3, column 2, empty"></button><button class="cell" data-index="8" aria-label="Row 3, column 3, empty"></button>
+            </div>
+          </div>
+          <div class="players-legend"><span><i class="legend-mark human-dot"></i> YOU <strong id="human-mark-label">X</strong></span><span class="legend-divider"></span><span><i class="legend-mark agent-dot"></i> AGENT <strong id="agent-mark-label">O</strong></span></div>
+          <div class="game-bottom"><div class="keyboard-hint"><span aria-hidden="true">⌨</span> Arrow keys to navigate · Enter to play</div><button class="new-game-button" id="new-game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg> New round</button></div>
+        </div>
+
+        <aside class="side-panel" aria-label="Game settings and agent insights">
+          <section class="settings-card"><div class="section-topline"><span class="eyebrow">MAKE YOUR MOVE</span><span class="small-index">01 / PLAY</span></div><h2>Pick your side.</h2><p class="muted">X makes the first move. Always.</p>
+            <div class="side-selector" role="group" aria-label="Choose your mark"><button class="side-option selected" data-mark="X" aria-pressed="true"><span class="choice-symbol">✕</span><span>Play as X<small>You go first</small></span><span class="choice-check" aria-hidden="true">✓</span></button><button class="side-option" data-mark="O" aria-pressed="false"><span class="choice-symbol">○</span><span>Play as O<small>Agent goes first</small></span><span class="choice-check" aria-hidden="true">✓</span></button></div>
+            <div class="opponent-row"><label for="opponent">Your opponent</label><div class="select-wrap"><select id="opponent"><option value="trained">Trained Q-agent</option><option value="random">Random baseline</option></select></div></div>
+            <div class="settings-note" id="settings-note">A learned policy. A fresh challenge.</div>
+          </section>
+
+          <section class="insight-card" aria-labelledby="insight-title"><div class="section-topline"><span class="eyebrow">UNDER THE HOOD</span><span class="insight-spark" aria-hidden="true">✳</span></div><h2 id="insight-title">No magic. Just learning.</h2><p id="insight-description">The agent chooses moves using values learned over thousands of practice games.</p>
+            <div class="model-stats"><div><strong id="episodes-value">—</strong><span>training episodes</span></div><div><strong id="states-value">—</strong><span>learned positions</span></div></div>
+            <div class="q-toggle-row"><label class="switch-label" for="show-q"><span>Peek at its decisions<small>See the learned action values</small></span><span class="switch"><input id="show-q" type="checkbox"><span class="switch-track"></span></span></label></div>
+            <div class="q-insight" id="q-insight" hidden><div class="q-heading"><span id="q-title">Waiting for the agent</span><span class="q-scale">Q(s, a)</span></div><div class="q-values" id="q-values"></div><p class="q-caption" id="q-caption">Make a move to see how the agent evaluates its options.</p></div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="session-strip" aria-labelledby="session-title"><div class="session-label"><span class="eyebrow" id="session-title">YOUR SCORECARD</span><span id="score-mode">Against the trained agent</span></div><div class="score-item"><strong id="wins">0</strong><span>Your wins</span><i class="score-dot mint"></i></div><div class="score-item"><strong id="draws">0</strong><span>Draws</span><i class="score-dot neutral"></i></div><div class="score-item"><strong id="losses">0</strong><span>Agent wins</span><i class="score-dot orange"></i></div><button id="reset-score" class="text-button" title="Reset this opponent’s saved score">Reset score <span aria-hidden="true">↺</span></button></section>
+
+      <section class="learning-section" id="learning" aria-labelledby="learning-title"><div class="section-topline"><span class="eyebrow">THE IDEA BEHIND THE GAME</span><span class="small-index">02 / LEARN</span></div><div class="learning-heading"><h2 id="learning-title">Experience becomes strategy.</h2><p>The board is its world. Every legal square is an action.<br>A win, draw, or loss teaches it which choices to value.</p></div><div class="learning-flow"><div><span class="step-num">01</span><h3>Observe</h3><p>Read the board from the agent’s point of view.</p></div><span class="flow-arrow" aria-hidden="true">→</span><div><span class="step-num">02</span><h3>Choose</h3><p>During training, explore or follow the best Q-value.</p></div><span class="flow-arrow" aria-hidden="true">→</span><div><span class="step-num">03</span><h3>Learn</h3><p>Use the reward and next state to update the table.</p></div></div><details class="math-details"><summary>See the Q-learning update <span aria-hidden="true">+</span></summary><div class="formula">Q(s, a) ← Q(s, a) + α [r + γ max Q(s′, a′) − Q(s, a)]</div><p>α controls learning speed. γ values future rewards. The maximum uses legal moves; a terminal state has no future value. During play, the trained agent selects a legal move with the highest Q-value and breaks ties at random. Its saved policy stays fixed while you play.</p><p id="reward-explanation">The exact training setup and measured results are included in the project notebook and report.</p></details></section>
+    </main>
+    <footer><span>ZERO SUM<span class="brand-period">.</span> <span class="footer-separator">/</span> Built to play. Designed to explain.</span><span>REINFORCEMENT LEARNING · LAB CA</span></footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

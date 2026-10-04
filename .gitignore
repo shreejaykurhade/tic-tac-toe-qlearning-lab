@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
+.local/
+tmp/
+report/qa/
+report/docx_render/
+node_modules/
+*.log
+.env
