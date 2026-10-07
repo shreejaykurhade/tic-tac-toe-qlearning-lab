@@ -10,3 +10,4 @@ report/docx_render/
 node_modules/
 *.log
 .env
+one_cell_outputs/

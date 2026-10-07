@@ -80,6 +80,12 @@ For a short demonstration, reduce `--episodes`. A shorter run can produce differ
 
 ## Notebook
 
+**Want everything in one code block?** Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb). It has one explanatory Markdown cell and **one executable Python cell** containing the complete environment, agent, opponents, training, evaluation, graphs, and browser game source. Run the cell once. It saves a fresh model, results, plots, and standalone game in `one_cell_outputs/`. The code is generated from the same source modules as the repository, so the notebook and project implementation stay aligned.
+
+[Open the one-cell notebook in Colab](https://colab.research.google.com/github/shreejaykurhade/tic-tac-toe-qlearning-lab/blob/main/notebooks/TicTacToe_All_In_One.ipynb)
+
+The original notebook below offers the same project as a guided sequence of smaller cells.
+
 Open [TicTacToe_Q_Learning.ipynb](notebooks/TicTacToe_Q_Learning.ipynb) in Jupyter and run all cells in order. It embeds the project source, creates a temporary experiment folder, trains the agent, displays metrics and plots, runs the Python tests, and embeds the complete game in an iframe.
 
 The included notebook was **executed locally: eight code cells completed with zero errors**. It is also compatible with Google Colab; a cloud execution is not claimed.
