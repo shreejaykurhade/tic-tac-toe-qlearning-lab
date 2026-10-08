@@ -80,7 +80,9 @@ For a short demonstration, reduce `--episodes`. A shorter run can produce differ
 
 ## Notebook
 
-**Want everything in one code block?** Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb). It has one explanatory Markdown cell and **one executable Python cell** containing the complete environment, agent, opponents, training, evaluation, graphs, and browser game source. Run the cell once. It saves a fresh model, results, plots, and standalone game in `one_cell_outputs/`. The code is generated from the same source modules as the repository, so the notebook and project implementation stay aligned.
+**Want everything in one code block?** Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb). It has one short introduction and **one executable Python cell** containing the environment, agent, training, evaluation, and the existing browser game UI. The three settings are at the top of that cell. Run it once to save a fresh model, results, two key graphs, a standalone game, and a complete Q-table snapshot every 100 training episodes in `one_cell_outputs/`.
+
+The full 160,000-episode run is included here: [all 1,600 Q-table snapshots](artifacts/q_table_every_100.jsonl.gz) (gzip JSON Lines, 31.7 MB) and a [checkpoint index CSV](artifacts/q_table_index_every_100.csv). Each JSON line contains `episode`, `epsilon`, and the **entire canonical Q-table** at that episode. The CSV gives the number of learned states and the nine empty-board Q-values at each checkpoint. The notebook shows readable previews of episode 100 and the final episode; its `show_q_table(episode, limit=None)` helper displays any complete saved table. The source modules and notebook are generated from the same implementation.
 
 [Open the one-cell notebook in Colab](https://colab.research.google.com/github/shreejaykurhade/tic-tac-toe-qlearning-lab/blob/main/notebooks/TicTacToe_All_In_One.ipynb)
 
@@ -127,7 +129,7 @@ tictactoe/
   train.py                      Training, experiment output, plots
   evaluate.py                   Baseline evaluation and adversarial audit
 notebooks/                      Executed, self-contained notebook
-artifacts/                      Model, measurements, logs, plots, screenshots
+artifacts/                      Model, Q-table snapshots, results, plots, screenshots
 report/                         Lab report in Word, PDF, and Markdown
 scripts/                        Offline, notebook, and report builders
 tests/                          Python and JavaScript checks

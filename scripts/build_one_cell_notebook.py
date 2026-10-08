@@ -17,14 +17,33 @@ def standalone_source(name: str) -> str:
     source = re.sub(r"(?m)^\s*from \.(?:core|agent|evaluate) import [^\n]*\n", "\n", source)
     if name == "train.py":
         source = source.split('\nif __name__ == "__main__":', 1)[0]
+        replacements = {
+            "def train(config: TrainingConfig, progress: bool = True):":
+                "def train(config: TrainingConfig, progress: bool = True, snapshot_callback=None):",
+            "        total_reward += reward\n":
+                "        total_reward += reward\n"
+                "        if snapshot_callback and (episode % 100 == 0 or episode == config.episodes):\n"
+                "            snapshot_callback(episode, agent, epsilon)\n",
+            "                   progress: bool = True) -> dict:":
+                "                   progress: bool = True, snapshot_callback=None) -> dict:",
+            "    agent, history, checkpoints, elapsed = train(config, progress)":
+                "    agent, history, checkpoints, elapsed = train(config, progress, snapshot_callback)",
+        }
+        for old, new in replacements.items():
+            if source.count(old) != 1:
+                raise ValueError(f"Expected one training insertion point: {old!r}")
+            source = source.replace(old, new)
     return source
 
 
 def build():
     parts = [
-        "# TIC-TAC-TOE WITH Q-LEARNING — COMPLETE, SELF-CONTAINED CODE CELL\n"
-        "# Run this one cell to train, evaluate, plot, and play.\n"
-        "# Requirements: Python 3.10+, NumPy, Matplotlib, IPython/Jupyter.\n",
+        "# TIC-TAC-TOE WITH Q-LEARNING — ONE CODE CELL\n"
+        "# Edit these three settings, then run this cell once.\n"
+        "EPISODES = 160_000\n"
+        "SEED = 42\n"
+        "EVALUATION_GAMES_PER_ROLE = 2_000\n"
+        "# Full Q-tables are saved every 100 episodes. CPU is sufficient.\n",
     ]
     for filename in ("core.py", "agent.py", "evaluate.py", "train.py"):
         parts.append("\n# " + "=" * 76 + "\n# " + filename + "\n# " + "=" * 76 + "\n")
@@ -32,39 +51,94 @@ def build():
 
     parts.append("""
 # ============================================================================
-# RUN THE EXPERIMENT: edit these values if you want a shorter demonstration.
-# The published report and bundled model use the defaults below.
+# RUN THE EXPERIMENT using the settings at the top of this cell.
 # ============================================================================
 from IPython.display import display, HTML, Image, Markdown
 import html as html_module
 import re
+import gzip
 
-EPISODES = 160_000
-SEED = 42
-EVALUATION_GAMES_PER_ROLE = 2_000
 OUTPUT = Path.cwd() / "one_cell_outputs"
 
 config = TrainingConfig(
     episodes=EPISODES, seed=SEED, alpha=0.15, gamma=0.97,
     final_games_per_role=EVALUATION_GAMES_PER_ROLE,
 )
-summary = run_experiment(config, OUTPUT, plots=True, progress=True)
+OUTPUT.mkdir(parents=True, exist_ok=True)
+snapshot_path = OUTPUT / "q_table_every_100.jsonl.gz"
+snapshot_index = []
 
-# The baseline uses an all-zero table. Results are from a separate evaluation
-# seed with epsilon=0 and no Q-value updates.
+with gzip.open(snapshot_path, "wt", encoding="utf-8") as snapshot_file:
+    def save_q_table(episode, agent, epsilon):
+        # Full canonical Q-table at this exact training episode.
+        snapshot_file.write(json.dumps({
+            "episode": episode,
+            "epsilon": epsilon,
+            "q_table": agent.q,
+        }, separators=(",", ":")) + "\\n")
+        snapshot_index.append({
+            "episode": episode,
+            "states": len(agent.q),
+            "empty_board_q": agent.values("000000000"),
+        })
+
+    summary = run_experiment(
+        config, OUTPUT, plots=True, progress=False,
+        snapshot_callback=save_q_table,
+    )
+
+with (OUTPUT / "q_table_index_every_100.csv").open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.writer(stream)
+    writer.writerow(["episode", "canonical_states"] + [f"empty_board_q{i}" for i in range(9)])
+    for item in snapshot_index:
+        writer.writerow([item["episode"], item["states"], *item["empty_board_q"]])
+
+def show_q_table(episode, limit=12):
+    # Display the saved table for one checkpoint, optionally limiting rows.
+    if episode < 100 or episode > EPISODES or (episode % 100 and episode != EPISODES):
+        raise ValueError("Choose 100, 200, ..., EPISODES")
+    record = None
+    with gzip.open(snapshot_path, "rt", encoding="utf-8") as stream:
+        for line in stream:
+            candidate = json.loads(line)
+            if candidate["episode"] == episode:
+                record = candidate
+                break
+    if record is None:
+        raise ValueError("No Q-table saved for that episode")
+    states = sorted(record["q_table"].items())
+    selected = states if limit is None else states[:limit]
+    columns = "| State (0 empty, 1 self, 2 opponent) | " + " | ".join(f"Q{i}" for i in range(9)) + " |"
+    separator = "|---|" + "---:|" * 9
+    lines = [columns, separator]
+    lines.extend("| `" + state + "` | " + " | ".join(f"{value:.3f}" for value in values) + " |"
+                 for state, values in selected)
+    display(Markdown(f"### Q-table after {episode:,} games — {len(states):,} states\\n"
+                     + "\\n".join(lines)))
+    if limit is not None and len(states) > limit:
+        print(f"Showing {limit} of {len(states)} states. Use show_q_table({episode}, limit=None) for all.")
+
+display(Markdown(
+    f"## Q-table every 100 games\\n"
+    f"Saved **{len(snapshot_index):,} full Q-table snapshots** to "
+    f"`{snapshot_path.name}`. The companion CSV tracks every checkpoint. "
+    "Call `show_q_table(100)` or `show_q_table(1000, limit=None)` to inspect any saved table."
+))
+show_q_table(100, limit=8)
+show_q_table(EPISODES, limit=8)
+
 evaluation = summary["evaluation"]
 rows = [
-    "| Opponent | Policy | Games | Wins | Draws | Losses | Win rate | Non-loss rate |",
-    "|---|---|---:|---:|---:|---:|---:|---:|",
+    "| Opponent | Games | Wins | Draws | Losses | Non-loss rate |",
+    "|---|---:|---:|---:|---:|---:|",
 ]
 for opponent_name in ("random", "tactical", "minimax"):
-    for policy_name in ("baseline", "trained"):
-        metrics = evaluation[policy_name][opponent_name]["combined"]
-        rows.append(
-            f"| {opponent_name} | {policy_name} | {metrics['games']:,} | "
-            f"{metrics['wins']:,} | {metrics['draws']:,} | {metrics['losses']:,} | "
-            f"{metrics['win_rate']:.2%} | {metrics['non_loss_rate']:.2%} |"
-        )
+    metrics = evaluation["trained"][opponent_name]["combined"]
+    rows.append(
+        f"| {opponent_name} | {metrics['games']:,} | "
+        f"{metrics['wins']:,} | {metrics['draws']:,} | {metrics['losses']:,} | "
+        f"{metrics['non_loss_rate']:.2%} |"
+    )
 display(Markdown("## Measured evaluation\\n" + "\\n".join(rows)))
 display(Markdown(
     f"**Canonical states:** {summary['canonical_states']:,}  ·  "
@@ -73,10 +147,7 @@ display(Markdown(
     f"X loss probability {evaluation['adversarial_audit']['X']['loss_probability']:.3f}, "
     f"O loss probability {evaluation['adversarial_audit']['O']['loss_probability']:.3f}"
 ))
-for plot_name in (
-    "reward_vs_episode.png", "success_vs_episode.png",
-    "steps_vs_episode.png", "td_error_vs_episode.png",
-):
+for plot_name in ("reward_vs_episode.png", "success_vs_episode.png"):
     display(Image(filename=str(OUTPUT / "plots" / plot_name)))
 
 # Build the actual offline game from this run's Q-table. The page contains all
@@ -124,15 +195,16 @@ print("All local results:", OUTPUT)
     notebook = nbf.v4.new_notebook(
         cells=[
             nbf.v4.new_markdown_cell(
-                "# Tic-Tac-Toe using Q-learning — all code in one cell\n\n"
-                "**Reinforcement Learning Lab CA, Semester VII.** Run the code cell below once. "
-                "It contains the complete game environment, Q-learning agent, opponents, "
-                "training, evaluation, plots, and playable browser UI. No repository clone, "
-                "download, API key, or internet connection is required. A CPU is sufficient.\n\n"
-                "The default experiment trains for 160,000 games and evaluates 2,000 games "
-                "per player role per opponent. Edit `EPISODES` near the end of the cell for a "
-                "shorter demonstration; its results will differ from the report. "
-                "Generated files appear in `one_cell_outputs/` in the notebook's working folder.\n\n"
+                "# Tic-Tac-Toe Q-learning — one cell\n\n"
+                "Run the code cell once to train the agent and play it in the same interface "
+                "as the offline game. Change `EPISODES` at the **top of the code cell** if you want "
+                "a shorter run. The default is 160,000 episodes.\n\n"
+                "A **full Q-table snapshot is saved every 100 training episodes** in "
+                "`one_cell_outputs/q_table_every_100.jsonl.gz`. The companion CSV lists every "
+                "checkpoint and the empty-board Q-values. The notebook shows the first and last "
+                "tables; call `show_q_table(episode, limit=None)` to view any complete checkpoint. "
+                "The interface and final model are bundled into `one_cell_outputs/TicTacToe_Offline.html`. "
+                "Python 3.10+, NumPy, Matplotlib, and Jupyter are required. No download or API key is used.\n\n"
                 "Student name: __________  ·  Roll number: __________  ·  "
                 "Division/batch: __________  ·  Date: __________"
             ),
