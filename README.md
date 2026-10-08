@@ -10,6 +10,10 @@ Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyt
 
 Open the plots directly: [training curves](artifacts/plots/notebook_training_plots.png), [results by human opening](artifacts/plots/notebook_opening_graphs.png), [Q-value progress for all openings](artifacts/plots/notebook_opening_q_progress.png), and [AI decisions for all openings](artifacts/plots/notebook_ai_decisions_all_openings.png). The decision chart in the running notebook updates after every AI move.
 
+The notebook also displays five separate standard RL graphs before the existing diagrams: **reward vs episode**, **success rate vs episode**, **steps per episode**, **mean absolute TD error vs episode**, and **exploration rate (epsilon) vs episode**. Each uses non-overlapping 1,000-game training windows. Reward and success are exploratory training outcomes; TD error measures the size of Q-learning updates, not prediction accuracy.
+
+Direct PNGs: [reward](artifacts/plots/notebook_reward_vs_episode.png), [success rate](artifacts/plots/notebook_success_vs_episode.png), [steps](artifacts/plots/notebook_steps_vs_episode.png), [TD error](artifacts/plots/notebook_td_error_vs_episode.png), and [epsilon](artifacts/plots/notebook_epsilon_vs_episode.png).
+
 ```bash
 python -m pip install -r requirements.txt
 jupyter notebook notebooks/TicTacToe_All_In_One.ipynb

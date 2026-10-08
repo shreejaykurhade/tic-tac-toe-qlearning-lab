@@ -38,7 +38,9 @@ history = []
 start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
                "Right", "Bottom-left", "Bottom", "Bottom-right")
 opening_q_history = []
-window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
+window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0,
+          "moves": 0, "decisions": 0, "td_error": 0.0}
+total_reward = 0.0
 q_logs = [widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
           for _ in range(9)]
 training_table = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
@@ -60,6 +62,8 @@ for episode in range(1, EPISODES + 1):
     agent_mark = X if episode % 2 else O
     board = EMPTY_BOARD
     moves = 0
+    decisions = 0
+    episode_error = 0.0
     if agent_mark == O:
         board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
         moves += 1
@@ -71,6 +75,7 @@ for episode in range(1, EPISODES + 1):
         action = agent.select_action(board, agent_mark, epsilon)
         board = play(board, action, agent_mark)
         moves += 1
+        decisions += 1
         if not terminal(board):
             opponent_mark = other(agent_mark)
             reply = mixture_action(board, opponent_mark, opponent_rng, opponent_weights)
@@ -80,8 +85,8 @@ for episode in range(1, EPISODES + 1):
         result = winner(board)
         # Reward: win +1, draw +0.3, loss -1.
         reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
-        agent.update(state, action, reward,
-                     None if done else encode_state(board, agent_mark), done)
+        episode_error += agent.update(state, action, reward,
+                                      None if done else encode_state(board, agent_mark), done)
         if done:
             break
 
@@ -90,12 +95,18 @@ for episode in range(1, EPISODES + 1):
     window["losses"] += result == other(agent_mark)
     window["reward"] += reward
     window["moves"] += moves
+    window["decisions"] += decisions
+    window["td_error"] += episode_error
+    total_reward += reward
     if episode % 1000 == 0 or episode == EPISODES:
         count = episode % 1000 or 1000
         history.append({"episode": episode, "epsilon": epsilon,
                         "avg_reward": window["reward"] / count,
+                        "cumulative_reward": total_reward,
                         "non_loss": (window["wins"] + window["draws"]) / count,
                         "avg_moves": window["moves"] / count,
+                        "avg_decisions": window["decisions"] / count,
+                        "mean_abs_td_error": window["td_error"] / window["decisions"],
                         "wins": window["wins"], "draws": window["draws"],
                         "losses": window["losses"]})
         best_values = []
@@ -104,7 +115,8 @@ for episode in range(1, EPISODES + 1):
             q_logs[start].append_stdout(snapshot)
             best_values.append(best_q)
         opening_q_history.append({"episode": episode, "best_values": best_values})
-        window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
+        window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0,
+                  "moves": 0, "decisions": 0, "td_error": 0.0}
 
 table_lines = ["Training results by 1,000-game window",
                f"{'Episode':>8} {'eps':>6} {'W':>5} {'D':>5} {'L':>5} {'avg reward':>11} {'non-loss':>9} {'moves':>7}"]
@@ -179,8 +191,34 @@ for row in opening_results:
           f"{row['best_q']:+8.3f} {row['wins']:6d} {row['draws']:6d} "
           f"{row['losses']:6d} {row['wins'] / OPENING_GAMES:9.1%}")
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
+# Standard RL learning curves use the same non-overlapping 1,000-game windows.
 xs = [row["episode"] for row in history]
+def learning_curve(title, ylabel, series, ylim=None):
+    fig, ax = plt.subplots(figsize=(8, 4), constrained_layout=True)
+    for label, values, color in series:
+        ax.plot(xs, values, label=label, color=color, linewidth=2)
+    ax.set(title=title, xlabel="Training episode", ylabel=ylabel)
+    ax.grid(alpha=0.25)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    if len(series) > 1:
+        ax.legend()
+    display(Image(data=figure_png(fig)))
+
+print("\\nSTANDARD RL GRAPHS (1,000-game training windows)")
+learning_curve("Reward vs episode", "Mean terminal reward per game",
+               [("Mean reward", [r["avg_reward"] for r in history], "#2563eb")])
+learning_curve("Success rate vs episode", "Wins + draws / games",
+               [("Training non-loss rate", [r["non_loss"] for r in history], "#059669")], (0, 1.05))
+learning_curve("Steps per episode vs episode", "Mean moves per game",
+               [("Board moves", [r["avg_moves"] for r in history], "#d97706"),
+                ("AI decisions", [r["avg_decisions"] for r in history], "#7c3aed")])
+learning_curve("TD error vs episode", "Mean absolute TD error / update",
+               [("Learning error", [r["mean_abs_td_error"] for r in history], "#dc2626")])
+learning_curve("Exploration rate vs episode", "Epsilon",
+               [("Exploration", [r["epsilon"] for r in history], "#0891b2")], (0, 1.05))
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
 for ax, key, title, ylabel, color in zip(
     axes,
     ("avg_reward", "non_loss", "avg_moves"),
@@ -458,7 +496,8 @@ def build():
                 "table, opponent evaluation, and reward, success-rate, and steps plots. "
                 "It also evaluates 1,000 games for each of the nine human opening squares, "
                 "with a Q-table, results table, and comparison graph for those openings. "
-                "The plots include Q-value progress and AI decisions for all nine openings. "
+                "The plots include five standard RL curves (reward, success, steps, "
+                "TD error, exploration), plus Q-value progress and AI decisions for all nine openings. "
                 "Expand the panels for full tables and Q-table snapshots, grouped by opening. "
                 "Each AI move also updates a Q-value bar chart. "
                 "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "
