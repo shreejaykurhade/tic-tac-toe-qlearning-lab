@@ -1,4 +1,4 @@
-"""Tabular Q-learning with board symmetry sharing."""
+"""Learn one expected reward for each board state and legal move."""
 
 import json
 from pathlib import Path
@@ -9,25 +9,28 @@ from .core import Board, canonicalize, encode_state, legal_actions, transform_st
 
 class QLearningAgent:
     def __init__(self, alpha: float = 0.15, gamma: float = 0.97, seed: int = 42):
-        # Q-table: one state key maps to nine action values.
+        # alpha = update size; gamma = importance of future rewards.
+        # Each state stores nine values, one for each board square.
         self.alpha = alpha
         self.gamma = gamma
         self.rng = random.Random(seed)
         self.q: dict[str, list[float]] = {}
 
     def values(self, state: str) -> list[float]:
-        # Share learning across rotations, then return visible board positions.
+        # Look up the shared rotated/mirrored board. An unseen board has zeros.
+        # Map the stored values back to the squares the player can see.
         key, permutation = canonicalize(state)
         values = self.q.get(key, [0.0] * 9)
         return [values[permutation[a]] for a in range(9)]
 
     def greedy_actions(self, board: Board, mark: int) -> list[int]:
-        # Compare only empty squares; occupied moves are illegal.
+        # Find the highest Q-value among empty squares only.
         actions = legal_actions(board)
         if not actions:
             return []
         values = self.values(encode_state(board, mark))
         maximum = max(values[a] for a in actions)
+        # Keep every equally good move; selection can break the tie randomly.
         return [a for a in actions if abs(values[a] - maximum) <= 1e-12]
 
     def select_action(self, board: Board, agent_mark: int, epsilon: float = 0.0,
@@ -36,20 +39,22 @@ class QLearningAgent:
         actions = legal_actions(board)
         if not actions:
             raise ValueError("No legal action in a terminal state.")
-        # Explore with probability epsilon; otherwise use the best Q-value.
+        # Epsilon-greedy: try a random legal move with probability epsilon.
+        # Otherwise choose a move with the highest learned value.
         if rng.random() < epsilon:
             return rng.choice(actions)
         return rng.choice(self.greedy_actions(board, agent_mark))
 
     def update(self, state: str, action: int, reward: float,
                next_state: str | None, done: bool) -> float:
-        """Update one state-action value after the opponent's reply."""
+        """Learn from one AI move and the opponent's reply."""
         if state[action] != "0":
             raise ValueError("Cannot learn an illegal action.")
         key, permutation = canonicalize(state)
         values = self.q.setdefault(key, [0.0] * 9)
         canonical_action = permutation[action]
-        # Terminal target is the reward; otherwise add future value.
+        # Finished game: target = win/draw/loss reward.
+        # Ongoing game: target = reward + gamma * best value next turn.
         target = reward
         if not done:
             if next_state is None:
@@ -60,7 +65,8 @@ class QLearningAgent:
                 raise ValueError("A nonterminal next state needs a legal action.")
             target += self.gamma * max(next_values[a] for a in actions)
         td_error = target - values[canonical_action]
-        # Q <- Q + alpha * (target - Q).
+        # Move the old estimate partway toward the target:
+        # new Q = old Q + alpha * (target - old Q).
         values[canonical_action] += self.alpha * td_error
         return abs(td_error)
 

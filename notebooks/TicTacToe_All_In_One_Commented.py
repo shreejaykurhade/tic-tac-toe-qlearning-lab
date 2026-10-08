@@ -1,24 +1,26 @@
 # One Python cell: rules, Q-learning agent, training, results, and game.
 # Part 1: board rules and training opponents.
-"""Game rules and opponents. Cells: 0 empty, 1 X, 2 O."""
+"""Board rules and opponents used to train the Q-learning agent."""
 
 from functools import lru_cache
 import random
 from typing import TypeAlias
 
 Board: TypeAlias = tuple[int, ...]
+# The tuple has nine squares in reading order: 0..2, 3..5, 6..8.
 X, O = 1, 2
 EMPTY_BOARD: Board = (0,) * 9
 WIN_LINES = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6))
 
 
 def legal_actions(board: Board) -> list[int]:
-    """Return legal empty squares."""
+    """Return empty square numbers, or none if someone has won."""
     return [] if winner(board) else [i for i, mark in enumerate(board) if mark == 0]
 
 
 @lru_cache(maxsize=None)
 def winner(board: Board) -> int:
+    """Check all eight possible winning lines; return X, O, or 0."""
     for a, b, c in WIN_LINES:
         if board[a] and board[a] == board[b] == board[c]:
             return board[a]
@@ -31,7 +33,7 @@ def terminal(board: Board) -> bool:
 
 
 def play(board: Board, action: int, mark: int) -> Board:
-    """Place a mark only in a valid empty square."""
+    """Make one move and return a new board, leaving the old board unchanged."""
     if len(board) != 9 or mark not in (X, O):
         raise ValueError("Expected a nine-cell board and mark X=1 or O=2.")
     if terminal(board):
@@ -42,8 +44,9 @@ def play(board: Board, action: int, mark: int) -> Board:
 
 
 def encode_state(board: Board, agent_mark: int) -> str:
-    """Encode 0 empty, 1 agent, 2 opponent."""
-    # The same encoding works whether the agent plays X or O.
+    """Describe the board from the agent's view for the Q-table key."""
+    # Example: human X at top-left, AI O to move -> "200000000".
+    # Using 1=self and 2=opponent lets the same Q-table serve X and O.
     return "".join("0" if m == 0 else "1" if m == agent_mark else "2" for m in board)
 
 
@@ -53,7 +56,8 @@ def other(mark: int) -> int:
 
 
 def _symmetries() -> tuple[tuple[int, ...], ...]:
-    # Rotate/reflect cell indices.
+    # A rotated or mirrored board has the same strategy in new coordinates.
+    # These eight mappings let us share one Q-table row across those boards.
     result = []
     for reflection in (False, True):
         for rotations in range(4):
@@ -73,6 +77,7 @@ SYMMETRIES = _symmetries()
 
 
 def transform_state(state: str, permutation: tuple[int, ...]) -> str:
+    """Move every cell to its rotated/reflected position."""
     result = ["0"] * 9
     for i, j in enumerate(permutation):
         result[j] = state[i]
@@ -81,14 +86,15 @@ def transform_state(state: str, permutation: tuple[int, ...]) -> str:
 
 @lru_cache(maxsize=None)
 def canonicalize(state: str) -> tuple[str, tuple[int, ...]]:
-    """Use one key for symmetric boards."""
-    # Return the smallest rotated/reflected state and its move mapping.
+    """Pick one shared Q-table key for equivalent board orientations."""
+    # Also return the mapping so action values can be shown on the real board.
     return min(((transform_state(state, p), p) for p in SYMMETRIES), key=lambda pair: pair[0])
 
 
 @lru_cache(maxsize=None)
 def minimax_value(board: Board, to_move: int) -> int:
-    """Score perfect play for the current player."""
+    """Score a position assuming both sides make perfect moves."""
+    # Minimax is an opponent for training/testing, not the playable AI policy.
     won = winner(board)
     if won:
         return 1 if won == to_move else -1
@@ -118,7 +124,7 @@ def minimax_action(board: Board, mark: int, rng: random.Random) -> int:
 
 
 def tactical_action(board: Board, mark: int, rng: random.Random) -> int:
-    """Win, block, then prefer center or corners."""
+    """Training opponent: win now, block a win, then prefer strong squares."""
     actions = legal_actions(board)
     for target in (mark, other(mark)):
         winning = [a for a in actions if winner(play(board, a, target)) == target]
@@ -140,7 +146,7 @@ def mixture_action(board: Board, mark: int, rng: random.Random,
     return OPPONENTS[name](board, mark, rng)
 
 # Part 2: Q-table, action selection, and learning update.
-"""Tabular Q-learning with board symmetry sharing."""
+"""Learn one expected reward for each board state and legal move."""
 
 import json
 from pathlib import Path
@@ -150,25 +156,28 @@ import random
 
 class QLearningAgent:
     def __init__(self, alpha: float = 0.15, gamma: float = 0.97, seed: int = 42):
-        # Q-table: one state key maps to nine action values.
+        # alpha = update size; gamma = importance of future rewards.
+        # Each state stores nine values, one for each board square.
         self.alpha = alpha
         self.gamma = gamma
         self.rng = random.Random(seed)
         self.q: dict[str, list[float]] = {}
 
     def values(self, state: str) -> list[float]:
-        # Share learning across rotations, then return visible board positions.
+        # Look up the shared rotated/mirrored board. An unseen board has zeros.
+        # Map the stored values back to the squares the player can see.
         key, permutation = canonicalize(state)
         values = self.q.get(key, [0.0] * 9)
         return [values[permutation[a]] for a in range(9)]
 
     def greedy_actions(self, board: Board, mark: int) -> list[int]:
-        # Compare only empty squares; occupied moves are illegal.
+        # Find the highest Q-value among empty squares only.
         actions = legal_actions(board)
         if not actions:
             return []
         values = self.values(encode_state(board, mark))
         maximum = max(values[a] for a in actions)
+        # Keep every equally good move; selection can break the tie randomly.
         return [a for a in actions if abs(values[a] - maximum) <= 1e-12]
 
     def select_action(self, board: Board, agent_mark: int, epsilon: float = 0.0,
@@ -177,20 +186,22 @@ class QLearningAgent:
         actions = legal_actions(board)
         if not actions:
             raise ValueError("No legal action in a terminal state.")
-        # Explore with probability epsilon; otherwise use the best Q-value.
+        # Epsilon-greedy: try a random legal move with probability epsilon.
+        # Otherwise choose a move with the highest learned value.
         if rng.random() < epsilon:
             return rng.choice(actions)
         return rng.choice(self.greedy_actions(board, agent_mark))
 
     def update(self, state: str, action: int, reward: float,
                next_state: str | None, done: bool) -> float:
-        """Update one state-action value after the opponent's reply."""
+        """Learn from one AI move and the opponent's reply."""
         if state[action] != "0":
             raise ValueError("Cannot learn an illegal action.")
         key, permutation = canonicalize(state)
         values = self.q.setdefault(key, [0.0] * 9)
         canonical_action = permutation[action]
-        # Terminal target is the reward; otherwise add future value.
+        # Finished game: target = win/draw/loss reward.
+        # Ongoing game: target = reward + gamma * best value next turn.
         target = reward
         if not done:
             if next_state is None:
@@ -201,13 +212,14 @@ class QLearningAgent:
                 raise ValueError("A nonterminal next state needs a legal action.")
             target += self.gamma * max(next_values[a] for a in actions)
         td_error = target - values[canonical_action]
-        # Q <- Q + alpha * (target - Q).
+        # Move the old estimate partway toward the target:
+        # new Q = old Q + alpha * (target - old Q).
         values[canonical_action] += self.alpha * td_error
         return abs(td_error)
 
 
 
-# Part 3: train, evaluate, plot results, and play.
+# Part 3: train the agent, measure its results, then play against it.
 import ipywidgets as widgets
 from IPython.display import Image, display
 import matplotlib.pyplot as plt
@@ -222,8 +234,10 @@ def figure_png(fig):
 
 EPISODES = 160_000
 SEED = 42
+# A fixed seed makes the training run reproducible for a lab demonstration.
 agent = QLearningAgent(alpha=0.15, gamma=0.97, seed=SEED)
 opponent_rng = random.Random(SEED + 1)
+# On each opponent turn, choose random/tactical/minimax with these weights.
 opponent_weights = (0.25, 0.15, 0.60)  # random, tactical, minimax
 history = []
 start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
@@ -239,7 +253,8 @@ training_table = widgets.Output(layout=widgets.Layout(max_height="320px", overfl
 opening_q_log = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
 
 def q_snapshot(episode, start, name):
-    # Print the nine Q-values after one fixed human opening.
+    # Hold the opening fixed to compare its Q-values at different episodes.
+    # "X" marks the human's occupied square; only empty squares are actions.
     board = play(EMPTY_BOARD, start, X)
     values = agent.values(encode_state(board, O))
     best = agent.greedy_actions(board, O)
@@ -252,7 +267,8 @@ def q_snapshot(episode, start, name):
     return "\n".join(lines), values[best[0]]
 
 def opening_checkpoint(episode, games=100):
-    # Measure learning for each opening without changing Q-values.
+    # Play 100 test games for each opening with exploration switched off.
+    # This measures improvement; test games never call agent.update().
     rates = []
     for start in range(9):
         rng = random.Random(SEED + 5000 + start)
@@ -269,7 +285,7 @@ def opening_checkpoint(episode, games=100):
     opening_performance.append({"episode": episode, "win_rates": rates})
 
 for episode in range(1, EPISODES + 1):
-    # Alternate the AI's role so it learns to start and to reply.
+    # One episode is one complete game. Alternate X/O to learn both roles.
     agent_mark = X if episode % 2 else O
     board = EMPTY_BOARD
     moves = 0
@@ -278,11 +294,13 @@ for episode in range(1, EPISODES + 1):
     if agent_mark == O:
         board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
         moves += 1
-    # Epsilon falls from 1.0 to 0.03.
+    # Epsilon is the chance of exploring a random legal move.
+    # It decreases from 1.0 to 0.03, then stays at 0.03.
     fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
     epsilon = 1.0 + fraction * (0.03 - 1.0)
     while True:
-        # One RL step: AI action, opponent reply, then the next AI state.
+        # The AI observes a state, acts, then sees the opponent's reply.
+        # Its next state is the board when it gets another turn.
         state = encode_state(board, agent_mark)
         action = agent.select_action(board, agent_mark, epsilon)
         board = play(board, action, agent_mark)
@@ -295,9 +313,10 @@ for episode in range(1, EPISODES + 1):
             moves += 1
         done = terminal(board)
         result = winner(board)
-        # Reward: win +1, draw +0.3, loss -1.
+        # Intermediate moves earn 0; the game result gives the final reward.
+        # AI win = +1, draw = +0.3, AI loss = -1.
         reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
-        # Update the Q-value of the action just taken.
+        # Apply Q-learning to this state-action pair after the reply.
         episode_error += agent.update(state, action, reward,
                                       None if done else encode_state(board, agent_mark), done)
         if done:
@@ -312,7 +331,8 @@ for episode in range(1, EPISODES + 1):
     window["td_error"] += episode_error
     total_reward += reward
     if episode % 1000 == 0 or episode == EPISODES:
-        # Record learning curves and Q-values for every human opening.
+        # Summarize the last 1,000 games for the learning curves.
+        # Save nine opening Q-tables so the same states can be compared.
         count = episode % 1000 or 1000
         history.append({"episode": episode, "epsilon": epsilon,
                         "avg_reward": window["reward"] / count,
@@ -344,7 +364,8 @@ training_table.append_stdout("\n".join(table_lines) + "\n")
 print(f"Training complete: {EPISODES:,} games; final 1,000-game window: "
       f"{history[-1]['non_loss']:.1%} non-loss, {history[-1]['avg_reward']:+.3f} mean reward.")
 
-# Test the trained policy; these games do not update Q.
+# Compare the learned greedy policy with three opponents.
+# These games only measure performance; they do not update the Q-table.
 print("\nFinal evaluation (200 games as X and 200 as O per opponent)")
 print(f"{'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7} {'Non-loss':>9}")
 for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
@@ -365,7 +386,8 @@ for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
         losses += result == other(agent_mark)
     print(f"{name:<10} {wins:5d} {draws:6d} {losses:7d} {(wins + draws) / 400:9.1%}")
 
-# Fix the first human square, then compare 1,000 games per square.
+# Keep the AI policy fixed and vary only the human's first square.
+# This isolates how the opening position affects the outcome.
 OPENING_GAMES = 1000
 opening_results = []
 print("\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
@@ -407,7 +429,8 @@ for row in opening_results:
           f"{row['best_q']:+8.3f} {row['wins']:6d} {row['draws']:6d} "
           f"{row['losses']:6d} {row['wins'] / OPENING_GAMES:9.1%}")
 
-# Standard RL learning curves use the same non-overlapping 1,000-game windows.
+# Standard RL curves show training reward, success, moves, TD error, and epsilon.
+# TD error is the gap between the old Q estimate and its learning target.
 xs = [row["episode"] for row in history]
 def learning_curve(title, ylabel, series, ylim=None):
     # Plot one training metric against episode number.
@@ -517,7 +540,8 @@ for index, title in enumerate(("Full training table", "Q-table every 1,000 games
 display(details)
 
 def draw_decision_bars(ax, board, values, selected):
-    # One bar per square; occupied squares have no legal Q-value.
+    # One bar per square: green = chosen, blue = legal, gray = occupied.
+    # Gray bars are plotted at zero because occupied moves cannot be chosen.
     ax.set_facecolor("white")
     colors = ["#cbd5e1" if board[i] else "#16a34a" if i == selected else "#2563eb"
               for i in range(9)]
@@ -557,7 +581,7 @@ display(Image(data=figure_png(fig)))
 
 
 class NotebookTicTacToe:
-    """Playable board with the AI's Q-table and decision chart."""
+    """Let a human play while showing why the trained AI chose its move."""
     def __init__(self, trained_agent):
         self.agent = trained_agent
         self.board = EMPTY_BOARD
@@ -639,6 +663,7 @@ class NotebookTicTacToe:
             button.style.font_weight = "bold"
 
     def _draw_board(self):
+        # Redraw X/O marks; occupied squares remain visible but cannot be played.
         for index, button in enumerate(self.cells):
             mark = self.board[index]
             button.description = "X" if mark == X else "O" if mark == O else ""
@@ -678,7 +703,7 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def human_move(self, index):
-        # Ignore occupied squares and finished games.
+        # Validate the click, place the human mark, then let the AI reply.
         if self.finished or self.board[index] != 0:
             return
         self.board = play(self.board, index, self.human_mark)
@@ -688,12 +713,14 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def _agent_move(self):
-        # Read learned values; do not update them during play.
+        # Inference only: read Q-values and choose a best legal action.
+        # epsilon=0 means no random exploration during the demonstration.
         before = self.board
         state = encode_state(before, self.agent_mark)
         values = self.agent.values(state)
         selected = self.agent.select_action(before, self.agent_mark, epsilon=0.0)
         self.q_state.value = "State: " + state + "  (AI's view)"
+        # Display the values from before the AI marks its selected square.
         for index, button in enumerate(self.q_cells):
             button.description = "occupied" if before[index] != 0 else f"{values[index]:+.3f}"
             button.style.button_color = (

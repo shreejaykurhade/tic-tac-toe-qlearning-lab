@@ -18,7 +18,7 @@ def module_source(filename: str) -> str:
 
 
 DEMO = '''
-# Part 3: train, evaluate, plot results, and play.
+# Part 3: train the agent, measure its results, then play against it.
 import ipywidgets as widgets
 from IPython.display import Image, display
 import matplotlib.pyplot as plt
@@ -33,8 +33,10 @@ def figure_png(fig):
 
 EPISODES = 160_000
 SEED = 42
+# A fixed seed makes the training run reproducible for a lab demonstration.
 agent = QLearningAgent(alpha=0.15, gamma=0.97, seed=SEED)
 opponent_rng = random.Random(SEED + 1)
+# On each opponent turn, choose random/tactical/minimax with these weights.
 opponent_weights = (0.25, 0.15, 0.60)  # random, tactical, minimax
 history = []
 start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
@@ -50,7 +52,8 @@ training_table = widgets.Output(layout=widgets.Layout(max_height="320px", overfl
 opening_q_log = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
 
 def q_snapshot(episode, start, name):
-    # Print the nine Q-values after one fixed human opening.
+    # Hold the opening fixed to compare its Q-values at different episodes.
+    # "X" marks the human's occupied square; only empty squares are actions.
     board = play(EMPTY_BOARD, start, X)
     values = agent.values(encode_state(board, O))
     best = agent.greedy_actions(board, O)
@@ -63,7 +66,8 @@ def q_snapshot(episode, start, name):
     return "\\n".join(lines), values[best[0]]
 
 def opening_checkpoint(episode, games=100):
-    # Measure learning for each opening without changing Q-values.
+    # Play 100 test games for each opening with exploration switched off.
+    # This measures improvement; test games never call agent.update().
     rates = []
     for start in range(9):
         rng = random.Random(SEED + 5000 + start)
@@ -80,7 +84,7 @@ def opening_checkpoint(episode, games=100):
     opening_performance.append({"episode": episode, "win_rates": rates})
 
 for episode in range(1, EPISODES + 1):
-    # Alternate the AI's role so it learns to start and to reply.
+    # One episode is one complete game. Alternate X/O to learn both roles.
     agent_mark = X if episode % 2 else O
     board = EMPTY_BOARD
     moves = 0
@@ -89,11 +93,13 @@ for episode in range(1, EPISODES + 1):
     if agent_mark == O:
         board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
         moves += 1
-    # Epsilon falls from 1.0 to 0.03.
+    # Epsilon is the chance of exploring a random legal move.
+    # It decreases from 1.0 to 0.03, then stays at 0.03.
     fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
     epsilon = 1.0 + fraction * (0.03 - 1.0)
     while True:
-        # One RL step: AI action, opponent reply, then the next AI state.
+        # The AI observes a state, acts, then sees the opponent's reply.
+        # Its next state is the board when it gets another turn.
         state = encode_state(board, agent_mark)
         action = agent.select_action(board, agent_mark, epsilon)
         board = play(board, action, agent_mark)
@@ -106,9 +112,10 @@ for episode in range(1, EPISODES + 1):
             moves += 1
         done = terminal(board)
         result = winner(board)
-        # Reward: win +1, draw +0.3, loss -1.
+        # Intermediate moves earn 0; the game result gives the final reward.
+        # AI win = +1, draw = +0.3, AI loss = -1.
         reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
-        # Update the Q-value of the action just taken.
+        # Apply Q-learning to this state-action pair after the reply.
         episode_error += agent.update(state, action, reward,
                                       None if done else encode_state(board, agent_mark), done)
         if done:
@@ -123,7 +130,8 @@ for episode in range(1, EPISODES + 1):
     window["td_error"] += episode_error
     total_reward += reward
     if episode % 1000 == 0 or episode == EPISODES:
-        # Record learning curves and Q-values for every human opening.
+        # Summarize the last 1,000 games for the learning curves.
+        # Save nine opening Q-tables so the same states can be compared.
         count = episode % 1000 or 1000
         history.append({"episode": episode, "epsilon": epsilon,
                         "avg_reward": window["reward"] / count,
@@ -155,7 +163,8 @@ training_table.append_stdout("\\n".join(table_lines) + "\\n")
 print(f"Training complete: {EPISODES:,} games; final 1,000-game window: "
       f"{history[-1]['non_loss']:.1%} non-loss, {history[-1]['avg_reward']:+.3f} mean reward.")
 
-# Test the trained policy; these games do not update Q.
+# Compare the learned greedy policy with three opponents.
+# These games only measure performance; they do not update the Q-table.
 print("\\nFinal evaluation (200 games as X and 200 as O per opponent)")
 print(f"{'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7} {'Non-loss':>9}")
 for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
@@ -176,7 +185,8 @@ for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
         losses += result == other(agent_mark)
     print(f"{name:<10} {wins:5d} {draws:6d} {losses:7d} {(wins + draws) / 400:9.1%}")
 
-# Fix the first human square, then compare 1,000 games per square.
+# Keep the AI policy fixed and vary only the human's first square.
+# This isolates how the opening position affects the outcome.
 OPENING_GAMES = 1000
 opening_results = []
 print("\\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
@@ -218,7 +228,8 @@ for row in opening_results:
           f"{row['best_q']:+8.3f} {row['wins']:6d} {row['draws']:6d} "
           f"{row['losses']:6d} {row['wins'] / OPENING_GAMES:9.1%}")
 
-# Standard RL learning curves use the same non-overlapping 1,000-game windows.
+# Standard RL curves show training reward, success, moves, TD error, and epsilon.
+# TD error is the gap between the old Q estimate and its learning target.
 xs = [row["episode"] for row in history]
 def learning_curve(title, ylabel, series, ylim=None):
     # Plot one training metric against episode number.
@@ -328,7 +339,8 @@ for index, title in enumerate(("Full training table", "Q-table every 1,000 games
 display(details)
 
 def draw_decision_bars(ax, board, values, selected):
-    # One bar per square; occupied squares have no legal Q-value.
+    # One bar per square: green = chosen, blue = legal, gray = occupied.
+    # Gray bars are plotted at zero because occupied moves cannot be chosen.
     ax.set_facecolor("white")
     colors = ["#cbd5e1" if board[i] else "#16a34a" if i == selected else "#2563eb"
               for i in range(9)]
@@ -368,7 +380,7 @@ display(Image(data=figure_png(fig)))
 
 
 class NotebookTicTacToe:
-    """Playable board with the AI's Q-table and decision chart."""
+    """Let a human play while showing why the trained AI chose its move."""
     def __init__(self, trained_agent):
         self.agent = trained_agent
         self.board = EMPTY_BOARD
@@ -450,6 +462,7 @@ class NotebookTicTacToe:
             button.style.font_weight = "bold"
 
     def _draw_board(self):
+        # Redraw X/O marks; occupied squares remain visible but cannot be played.
         for index, button in enumerate(self.cells):
             mark = self.board[index]
             button.description = "X" if mark == X else "O" if mark == O else ""
@@ -489,7 +502,7 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def human_move(self, index):
-        # Ignore occupied squares and finished games.
+        # Validate the click, place the human mark, then let the AI reply.
         if self.finished or self.board[index] != 0:
             return
         self.board = play(self.board, index, self.human_mark)
@@ -499,12 +512,14 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def _agent_move(self):
-        # Read learned values; do not update them during play.
+        # Inference only: read Q-values and choose a best legal action.
+        # epsilon=0 means no random exploration during the demonstration.
         before = self.board
         state = encode_state(before, self.agent_mark)
         values = self.agent.values(state)
         selected = self.agent.select_action(before, self.agent_mark, epsilon=0.0)
         self.q_state.value = "State: " + state + "  (AI's view)"
+        # Display the values from before the AI marks its selected square.
         for index, button in enumerate(self.q_cells):
             button.description = "occupied" if before[index] != 0 else f"{values[index]:+.3f}"
             button.style.button_color = (
