@@ -63,11 +63,11 @@ class NotebookTicTacToe:
 
         self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING")
         self.status = widgets.Label()
-        self.side = widgets.ToggleButtons(
-            options=[("Play as X", X), ("Play as O", O)], value=X,
-            description="You:", style={"description_width": "initial"},
-        )
-        self.side.observe(self._change_side, names="value")
+        self.play_x = widgets.Button(description="Play as X", layout=widgets.Layout(width="120px"))
+        self.play_o = widgets.Button(description="Play as O", layout=widgets.Layout(width="120px"))
+        self.play_x.on_click(lambda _: self._change_side(X))
+        self.play_o.on_click(lambda _: self._change_side(O))
+        self.side = widgets.HBox([self.play_x, self.play_o])
         self.new_game = widgets.Button(description="New game", icon="refresh")
         self.new_game.on_click(lambda _: self.reset())
 
@@ -77,7 +77,7 @@ class NotebookTicTacToe:
                 description="", layout=widgets.Layout(width="82px", height="82px"),
             )
             button.style.font_weight = "bold"
-            button.style.font_size = "28px"
+            button.style.font_size = "34px"
             button.on_click(lambda _, index=position: self.human_move(index))
             self.cells.append(button)
 
@@ -85,9 +85,12 @@ class NotebookTicTacToe:
         self.q_state = widgets.Label(value="Make a move to see the Q-table.")
         self.q_choice = widgets.Label(value="0 = empty · 1 = AI · 2 = you")
         self.q_cells = [widgets.Button(
-            description="—", disabled=True,
-            layout=widgets.Layout(width="92px", height="52px"),
+            description="—", layout=widgets.Layout(width="92px", height="52px"),
         ) for _ in range(9)]
+        for button in self.q_cells:
+            button.style.font_size = "14px"
+            button.style.font_weight = "bold"
+            button.tooltip = "Q value at the AI's last decision"
 
         board_grid = widgets.GridBox(
             self.cells,
@@ -105,19 +108,25 @@ class NotebookTicTacToe:
         )
         self.reset()
 
-    def _change_side(self, change):
-        if change["name"] == "value" and change["new"] in (X, O):
-            self.human_mark = change["new"]
-            self.agent_mark = other(self.human_mark)
-            self.reset()
+    def _change_side(self, mark):
+        self.human_mark = mark
+        self.agent_mark = other(mark)
+        self.reset()
+
+    def _draw_side(self):
+        for button, mark in ((self.play_x, X), (self.play_o, O)):
+            chosen = mark == self.human_mark
+            button.style.button_color = "#50d99a" if chosen else "#f8fafc"
+            button.style.text_color = "#102018" if chosen else "#17212b"
+            button.style.font_weight = "bold"
 
     def _draw_board(self):
         for index, button in enumerate(self.cells):
             mark = self.board[index]
             button.description = "X" if mark == X else "O" if mark == O else ""
-            button.button_style = "success" if mark == X else "warning" if mark == O else ""
-            button.style.button_color = "#dff8e8" if mark == X else "#fff0df" if mark == O else "#f8fafc"
-            button.disabled = self.finished or mark != 0
+            button.style.button_color = "#72e0a6" if mark == X else "#ffbe73" if mark == O else "#f8fafc"
+            button.style.text_color = "#082c1b" if mark == X else "#422300" if mark == O else "#17212b"
+            button.tooltip = "Empty square" if mark == 0 else "Occupied square"
 
     def _finish_or_continue(self):
         result = winner(self.board)
@@ -134,12 +143,13 @@ class NotebookTicTacToe:
     def reset(self):
         self.board = EMPTY_BOARD
         self.finished = False
+        self._draw_side()
         self.q_state.value = "Make a move to see the Q-table."
         self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
         for button in self.q_cells:
             button.description = "—"
-            button.button_style = ""
             button.style.button_color = "#f8fafc"
+            button.style.text_color = "#17212b"
         self.status.value = "Your turn. Choose an empty square."
         self._draw_board()
         if self.agent_mark == X:
@@ -163,11 +173,11 @@ class NotebookTicTacToe:
         self.q_state.value = "State: " + state + "  (AI's view)"
         for index, button in enumerate(self.q_cells):
             button.description = "occupied" if before[index] != 0 else f"{values[index]:+.3f}"
-            button.button_style = "success" if index == selected else ""
             button.style.button_color = (
-                "#c9f4dc" if index == selected else
-                "#eef2f5" if before[index] != 0 else "#f8fafc"
+                "#72e0a6" if index == selected else
+                "#dbe4ea" if before[index] != 0 else "#f8fafc"
             )
+            button.style.text_color = "#082c1b" if index == selected else "#243444"
         row, col = divmod(selected, 3)
         self.q_choice.value = (
             f"AI chose row {row + 1}, column {col + 1} · Q = {values[selected]:+.3f}"
