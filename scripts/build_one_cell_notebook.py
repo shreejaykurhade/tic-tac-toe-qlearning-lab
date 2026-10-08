@@ -165,6 +165,17 @@ class NotebookTicTacToe:
             button.style.font_weight = "bold"
             button.tooltip = "Q value at the AI's last decision"
 
+        # Notebook dark themes can override ButtonStyle.text_color.
+        self.font_fix = widgets.HTML(value="""<style>
+        .rl-black-text, .rl-black-text *, button.rl-black-text {
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+        }
+        </style>""")
+        for button in (self.play_x, self.play_o, self.new_game, *self.cells, *self.q_cells):
+            button.add_class("rl-black-text")
+            button.style.text_color = "#000000"
+
         board_grid = widgets.GridBox(
             self.cells,
             layout=widgets.Layout(grid_template_columns="repeat(3, 82px)", grid_gap="5px"),
@@ -173,7 +184,7 @@ class NotebookTicTacToe:
             self.q_cells,
             layout=widgets.Layout(grid_template_columns="repeat(3, 92px)", grid_gap="5px"),
         )
-        left = widgets.VBox([self.title, self.side, self.status, board_grid, self.new_game])
+        left = widgets.VBox([self.font_fix, self.title, self.side, self.status, board_grid, self.new_game])
         right = widgets.VBox([self.q_title, self.q_state, q_grid, self.q_choice])
         self.widget = widgets.HBox(
             [left, right],
@@ -190,7 +201,7 @@ class NotebookTicTacToe:
         for button, mark in ((self.play_x, X), (self.play_o, O)):
             chosen = mark == self.human_mark
             button.style.button_color = "#50d99a" if chosen else "#f8fafc"
-            button.style.text_color = "#102018" if chosen else "#17212b"
+            button.style.text_color = "#000000"
             button.style.font_weight = "bold"
 
     def _draw_board(self):
@@ -198,7 +209,7 @@ class NotebookTicTacToe:
             mark = self.board[index]
             button.description = "X" if mark == X else "O" if mark == O else ""
             button.style.button_color = "#72e0a6" if mark == X else "#ffbe73" if mark == O else "#f8fafc"
-            button.style.text_color = "#082c1b" if mark == X else "#422300" if mark == O else "#17212b"
+            button.style.text_color = "#000000"
             button.tooltip = "Empty square" if mark == 0 else "Occupied square"
 
     def _finish_or_continue(self):
@@ -222,7 +233,7 @@ class NotebookTicTacToe:
         for button in self.q_cells:
             button.description = "—"
             button.style.button_color = "#f8fafc"
-            button.style.text_color = "#17212b"
+            button.style.text_color = "#000000"
         self.status.value = "Your turn. Choose an empty square."
         self._draw_board()
         if self.agent_mark == X:
@@ -250,7 +261,7 @@ class NotebookTicTacToe:
                 "#72e0a6" if index == selected else
                 "#dbe4ea" if before[index] != 0 else "#f8fafc"
             )
-            button.style.text_color = "#082c1b" if index == selected else "#243444"
+            button.style.text_color = "#000000"
         row, col = divmod(selected, 3)
         self.q_choice.value = (
             f"AI chose row {row + 1}, column {col + 1} · Q = {values[selected]:+.3f}"
