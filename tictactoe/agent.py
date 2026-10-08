@@ -9,17 +9,20 @@ from .core import Board, canonicalize, encode_state, legal_actions, transform_st
 
 class QLearningAgent:
     def __init__(self, alpha: float = 0.15, gamma: float = 0.97, seed: int = 42):
+        # Q-table: one state key maps to nine action values.
         self.alpha = alpha
         self.gamma = gamma
         self.rng = random.Random(seed)
         self.q: dict[str, list[float]] = {}
 
     def values(self, state: str) -> list[float]:
+        # Share learning across rotated/reflected boards.
         key, permutation = canonicalize(state)
         values = self.q.get(key, [0.0] * 9)
         return [values[permutation[a]] for a in range(9)]
 
     def greedy_actions(self, board: Board, mark: int) -> list[int]:
+        # Compare only empty squares; occupied moves are illegal.
         actions = legal_actions(board)
         if not actions:
             return []
@@ -33,6 +36,7 @@ class QLearningAgent:
         actions = legal_actions(board)
         if not actions:
             raise ValueError("No legal action in a terminal state.")
+        # Explore with probability epsilon; otherwise use the best Q-value.
         if rng.random() < epsilon:
             return rng.choice(actions)
         return rng.choice(self.greedy_actions(board, agent_mark))
@@ -45,6 +49,7 @@ class QLearningAgent:
         key, permutation = canonicalize(state)
         values = self.q.setdefault(key, [0.0] * 9)
         canonical_action = permutation[action]
+        # Terminal target is the reward; otherwise add future value.
         target = reward
         if not done:
             if next_state is None:
@@ -55,6 +60,7 @@ class QLearningAgent:
                 raise ValueError("A nonterminal next state needs a legal action.")
             target += self.gamma * max(next_values[a] for a in actions)
         td_error = target - values[canonical_action]
+        # Q <- Q + alpha * (target - Q).
         values[canonical_action] += self.alpha * td_error
         return abs(td_error)
 

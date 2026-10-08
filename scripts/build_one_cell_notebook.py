@@ -77,6 +77,7 @@ def opening_checkpoint(episode, games=100):
     opening_performance.append({"episode": episode, "win_rates": rates})
 
 for episode in range(1, EPISODES + 1):
+    # Alternate the AI's role so it learns to start and to reply.
     agent_mark = X if episode % 2 else O
     board = EMPTY_BOARD
     moves = 0
@@ -89,6 +90,7 @@ for episode in range(1, EPISODES + 1):
     fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
     epsilon = 1.0 + fraction * (0.03 - 1.0)
     while True:
+        # One RL step: AI action, opponent reply, then the next AI state.
         state = encode_state(board, agent_mark)
         action = agent.select_action(board, agent_mark, epsilon)
         board = play(board, action, agent_mark)
@@ -103,6 +105,7 @@ for episode in range(1, EPISODES + 1):
         result = winner(board)
         # Reward: win +1, draw +0.3, loss -1.
         reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
+        # Update the Q-value of the action just taken.
         episode_error += agent.update(state, action, reward,
                                       None if done else encode_state(board, agent_mark), done)
         if done:
@@ -117,6 +120,7 @@ for episode in range(1, EPISODES + 1):
     window["td_error"] += episode_error
     total_reward += reward
     if episode % 1000 == 0 or episode == EPISODES:
+        # Record learning curves and Q-values for every human opening.
         count = episode % 1000 or 1000
         history.append({"episode": episode, "epsilon": epsilon,
                         "avg_reward": window["reward"] / count,
@@ -484,7 +488,7 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def _agent_move(self):
-        # Show Q-values before the AI places its mark.
+        # Read learned values; do not update them during play.
         before = self.board
         state = encode_state(before, self.agent_mark)
         values = self.agent.values(state)

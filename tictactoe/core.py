@@ -39,6 +39,7 @@ def play(board: Board, action: int, mark: int) -> Board:
 
 def encode_state(board: Board, agent_mark: int) -> str:
     """Encode 0 empty, 1 agent, 2 opponent."""
+    # The same encoding works whether the agent plays X or O.
     return "".join("0" if m == 0 else "1" if m == agent_mark else "2" for m in board)
 
 
@@ -76,6 +77,7 @@ def transform_state(state: str, permutation: tuple[int, ...]) -> str:
 @lru_cache(maxsize=None)
 def canonicalize(state: str) -> tuple[str, tuple[int, ...]]:
     """Use one key for symmetric boards."""
+    # Return the smallest rotated/reflected state and its move mapping.
     return min(((transform_state(state, p), p) for p in SYMMETRIES), key=lambda pair: pair[0])
 
 
