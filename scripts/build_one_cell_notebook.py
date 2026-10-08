@@ -39,11 +39,12 @@ def standalone_source(name: str) -> str:
 def build():
     parts = [
         "# TIC-TAC-TOE WITH Q-LEARNING — ONE CODE CELL\n"
-        "# Edit these three settings, then run this cell once.\n"
+        "# Edit these settings, then run this cell once.\n"
         "EPISODES = 160_000\n"
         "SEED = 42\n"
         "EVALUATION_GAMES_PER_ROLE = 2_000\n"
-        "# Full Q-tables are saved every 100 episodes. CPU is sufficient.\n",
+        "PRINT_Q_TABLE_EVERY = 1_000\n"
+        "# Complete Q-tables are printed every 1,000 games and saved every 100.\n",
     ]
     for filename in ("core.py", "agent.py", "evaluate.py", "train.py"):
         parts.append("\n# " + "=" * 76 + "\n# " + filename + "\n# " + "=" * 76 + "\n")
@@ -81,6 +82,19 @@ with gzip.open(snapshot_path, "wt", encoding="utf-8") as snapshot_file:
             "states": len(agent.q),
             "empty_board_q": agent.values("000000000"),
         })
+        if episode % PRINT_Q_TABLE_EVERY == 0:
+            heading = "state      " + " ".join(f"{'Q' + str(i):>8}" for i in range(9))
+            lines = [heading]
+            for state, values in sorted(agent.q.items()):
+                lines.append(state + "  " + " ".join(f"{value:+8.3f}" for value in values))
+            # A complete Q-table for this checkpoint; collapse it for readability.
+            display(HTML(
+                f'<details style="margin:8px 0;padding:8px;border:1px solid #d3dce0;'
+                f'border-radius:8px"><summary>Q-table after {episode:,} games '
+                f'({len(agent.q):,} states)</summary><pre style="max-height:340px;'
+                f'overflow:auto;font-size:11px">'
+                + html_module.escape("\\n".join(lines)) + '</pre></details>'
+            ))
 
     summary = run_experiment(
         config, OUTPUT, plots=True, progress=False,
@@ -122,10 +136,9 @@ display(Markdown(
     f"## Q-table every 100 games\\n"
     f"Saved **{len(snapshot_index):,} full Q-table snapshots** to "
     f"`{snapshot_path.name}`. The companion CSV tracks every checkpoint. "
-    "Call `show_q_table(100)` or `show_q_table(1000, limit=None)` to inspect any saved table."
+    f"The full table was also printed every {PRINT_Q_TABLE_EVERY:,} games above. "
+    "Call `show_q_table(episode, limit=None)` to inspect any exact checkpoint."
 ))
-show_q_table(100, limit=8)
-show_q_table(EPISODES, limit=8)
 
 evaluation = summary["evaluation"]
 rows = [
@@ -199,10 +212,11 @@ print("All local results:", OUTPUT)
                 "Run the code cell once to train the agent and play it in the same interface "
                 "as the offline game. Change `EPISODES` at the **top of the code cell** if you want "
                 "a shorter run. The default is 160,000 episodes.\n\n"
-                "A **full Q-table snapshot is saved every 100 training episodes** in "
+                "The **complete Q-table prints after every 1,000 games** in collapsible "
+                "sections. A full Q-table snapshot is also saved every 100 episodes in "
                 "`one_cell_outputs/q_table_every_100.jsonl.gz`. The companion CSV lists every "
-                "checkpoint and the empty-board Q-values. The notebook shows the first and last "
-                "tables; call `show_q_table(episode, limit=None)` to view any complete checkpoint. "
+                "checkpoint and the empty-board Q-values. Call "
+                "`show_q_table(episode, limit=None)` to view any exact saved checkpoint. "
                 "The interface and final model are bundled into `one_cell_outputs/TicTacToe_Offline.html`. "
                 "Python 3.10+, NumPy, Matplotlib, and Jupyter are required. No download or API key is used.\n\n"
                 "Student name: __________  ·  Roll number: __________  ·  "
