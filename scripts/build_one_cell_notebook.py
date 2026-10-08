@@ -20,18 +20,30 @@ DEMO = '''
 # Train: try moves early, then favor learned moves.
 import ipywidgets as widgets
 from IPython.display import display
+import matplotlib.pyplot as plt
 
 EPISODES = 160_000
 SEED = 42
 agent = QLearningAgent(alpha=0.15, gamma=0.97, seed=SEED)
 opponent_rng = random.Random(SEED + 1)
 opponent_weights = (0.25, 0.15, 0.60)  # random, tactical, minimax
+history = []
+window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
+
+def print_q_snapshot(episode):
+    # Opening-state values for X; other states remain in agent.q.
+    values = agent.values("000000000")
+    print(f"Episode {episode:,} | opening Q-table (X to move) | states: {len(agent.q)}")
+    for row in range(0, 9, 3):
+        print("  " + " | ".join(f"{value:+.3f}" for value in values[row:row + 3]))
 
 for episode in range(1, EPISODES + 1):
     agent_mark = X if episode % 2 else O
     board = EMPTY_BOARD
+    moves = 0
     if agent_mark == O:
         board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
+        moves += 1
     # Epsilon falls from 1.0 to 0.03.
     fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
     epsilon = 1.0 + fraction * (0.03 - 1.0)
@@ -39,10 +51,12 @@ for episode in range(1, EPISODES + 1):
         state = encode_state(board, agent_mark)
         action = agent.select_action(board, agent_mark, epsilon)
         board = play(board, action, agent_mark)
+        moves += 1
         if not terminal(board):
             opponent_mark = other(agent_mark)
             reply = mixture_action(board, opponent_mark, opponent_rng, opponent_weights)
             board = play(board, reply, opponent_mark)
+            moves += 1
         done = terminal(board)
         result = winner(board)
         # Reward: win +1, draw +0.3, loss -1.
@@ -51,6 +65,65 @@ for episode in range(1, EPISODES + 1):
                      None if done else encode_state(board, agent_mark), done)
         if done:
             break
+
+    window["wins"] += result == agent_mark
+    window["draws"] += result == 0
+    window["losses"] += result == other(agent_mark)
+    window["reward"] += reward
+    window["moves"] += moves
+    if episode % 1000 == 0 or episode == EPISODES:
+        count = episode % 1000 or 1000
+        history.append({"episode": episode, "epsilon": epsilon,
+                        "avg_reward": window["reward"] / count,
+                        "non_loss": (window["wins"] + window["draws"]) / count,
+                        "avg_moves": window["moves"] / count,
+                        "wins": window["wins"], "draws": window["draws"],
+                        "losses": window["losses"]})
+        print_q_snapshot(episode)
+        window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
+
+print("\\nTraining results by 1,000-game window")
+print(f"{'Episode':>8} {'eps':>6} {'W':>5} {'D':>5} {'L':>5} {'avg reward':>11} {'non-loss':>9} {'moves':>7}")
+for row in history:
+    print(f"{row['episode']:8,d} {row['epsilon']:6.3f} {row['wins']:5d} "
+          f"{row['draws']:5d} {row['losses']:5d} {row['avg_reward']:11.3f} "
+          f"{row['non_loss']:9.1%} {row['avg_moves']:7.2f}")
+
+# Evaluate the greedy policy against each opponent.
+print("\\nFinal evaluation (200 games as X and 200 as O per opponent)")
+print(f"{'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7} {'Non-loss':>9}")
+for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
+                      ("Minimax", (0, 0, 1))):
+    eval_rng = random.Random(SEED + 100)
+    wins = draws = losses = 0
+    for game_number in range(400):
+        agent_mark = X if game_number % 2 == 0 else O
+        board = EMPTY_BOARD
+        while not terminal(board):
+            turn = X if sum(cell != 0 for cell in board) % 2 == 0 else O
+            action = (agent.select_action(board, agent_mark, rng=eval_rng)
+                      if turn == agent_mark else mixture_action(board, turn, eval_rng, weights))
+            board = play(board, action, turn)
+        result = winner(board)
+        wins += result == agent_mark
+        draws += result == 0
+        losses += result == other(agent_mark)
+    print(f"{name:<10} {wins:5d} {draws:6d} {losses:7d} {(wins + draws) / 400:9.1%}")
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
+xs = [row["episode"] for row in history]
+for ax, key, title, ylabel, color in zip(
+    axes,
+    ("avg_reward", "non_loss", "avg_moves"),
+    ("Reward vs episode", "Success rate vs episode", "Steps per episode vs episode"),
+    ("Mean terminal reward", "Training non-loss rate", "Mean board moves"),
+    ("#2563eb", "#059669", "#d97706"),
+):
+    ax.plot(xs, [row[key] for row in history], color=color, linewidth=1.8)
+    ax.set(title=title, xlabel="Training episode", ylabel=ylabel)
+    ax.grid(alpha=0.25)
+axes[1].set_ylim(0, 1.05)
+plt.show()
 
 
 class NotebookTicTacToe:
@@ -203,13 +276,16 @@ def build():
         cells=[
             nbf.v4.new_markdown_cell(
                 "# Tic-Tac-Toe Q-learning — Python board\n\n"
-                "Run the code cell. Play on the left; see the AI's Q-values on the right. "
+                "Run the code cell to train, inspect results, and play. "
+                "The board is on the left; the AI's decision Q-values are on the right. "
                 "Choose X or O, or press **New game**.\n\n"
                 "To explain it: **state** = board from the AI's view (0 empty, 1 AI, 2 you); "
                 "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
                 "**Q-learning** updates move values after each game turn.\n\n"
-                "Default: 160,000 training games. Edit `EPISODES` for a shorter run. "
-                "Requires Python 3.10+, Jupyter, and `ipywidgets`."
+                "Default: 160,000 training games. The cell prints an opening-state "
+                "Q-table every 1,000 games, then a training table, opponent evaluation, "
+                "and reward, success-rate, and steps plots. Edit `EPISODES` for a shorter run. "
+                "Requires Python 3.10+, Jupyter, `ipywidgets`, and Matplotlib."
             ),
             nbf.v4.new_code_cell(code),
         ],

@@ -6,7 +6,7 @@ The agent learns from game outcomes and selects moves from its Q-table. Minimax 
 
 ## Play in Python
 
-Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent, then shows a simple 3×3 board beside a matching 3×3 Q-value panel. Choose X or O; the AI's chosen square and its action value are highlighted after every move. Use **New game** to reset. The notebook contains no HTML, CSS, or JavaScript source.
+Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and prints the opening-state 3×3 Q-table every 1,000 games. After training, it shows a per-1,000-game results table, a final evaluation table against random, tactical, and minimax opponents, and reward, success-rate, and steps plots. The playable 3×3 board sits beside its decision Q-values at the end. Choose X or O and use **New game** to reset. The notebook contains no HTML, CSS, or JavaScript source.
 
 ```bash
 python -m pip install -r requirements.txt
@@ -91,7 +91,7 @@ For a short demonstration, reduce `--episodes`. A shorter run can produce differ
 
 ## Notebook
 
-The [one-cell Python notebook](notebooks/TicTacToe_All_In_One.ipynb) is the simplest way to train and play. Its Q-value panel updates with the agent's latest decision. It keeps the game interface focused on the board and the nine action values.
+The [one-cell Python notebook](notebooks/TicTacToe_All_In_One.ipynb) is the simplest way to train, examine the learning results, and play. It includes saved training tables and plots for the lab writeup. Its game Q-value panel updates with the agent's latest decision.
 
 The earlier run's full Q-table history remains available as [1,600 snapshots every 100 games](artifacts/q_table_every_100.jsonl.gz) and a [checkpoint CSV](artifacts/q_table_index_every_100.csv). These are separate research artifacts; the playable notebook shows only the Q-values relevant to each current decision.
 
