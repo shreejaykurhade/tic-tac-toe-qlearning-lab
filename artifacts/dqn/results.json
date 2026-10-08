@@ -1,0 +1,455 @@
+{
+  "episodes": 20000,
+  "seed": 42,
+  "evaluation_games_per_role": 200,
+  "dqn": {
+    "random": {
+      "X": {
+        "games": 200,
+        "wins": 197,
+        "draws": 3,
+        "losses": 0,
+        "win_rate": 0.985,
+        "draw_rate": 0.015,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 197.9,
+        "average_reward": 0.9895,
+        "total_board_moves": 1210,
+        "average_board_moves": 6.05
+      },
+      "O": {
+        "games": 200,
+        "wins": 182,
+        "draws": 18,
+        "losses": 0,
+        "win_rate": 0.91,
+        "draw_rate": 0.09,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 187.4,
+        "average_reward": 0.937,
+        "total_board_moves": 1318,
+        "average_board_moves": 6.59
+      },
+      "combined": {
+        "games": 400,
+        "wins": 379,
+        "draws": 21,
+        "losses": 0,
+        "win_rate": 0.9475,
+        "draw_rate": 0.0525,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 385.3,
+        "average_reward": 0.96325,
+        "total_board_moves": 2528,
+        "average_board_moves": 6.32
+      }
+    },
+    "tactical": {
+      "X": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "O": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "combined": {
+        "games": 400,
+        "wins": 0,
+        "draws": 400,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 120.0,
+        "average_reward": 0.3,
+        "total_board_moves": 3600,
+        "average_board_moves": 9.0
+      }
+    },
+    "minimax": {
+      "X": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "O": {
+        "games": 200,
+        "wins": 0,
+        "draws": 198,
+        "losses": 2,
+        "win_rate": 0.0,
+        "draw_rate": 0.99,
+        "loss_rate": 0.01,
+        "non_loss_rate": 0.99,
+        "cumulative_reward": 57.4,
+        "average_reward": 0.287,
+        "total_board_moves": 1796,
+        "average_board_moves": 8.98
+      },
+      "combined": {
+        "games": 400,
+        "wins": 0,
+        "draws": 398,
+        "losses": 2,
+        "win_rate": 0.0,
+        "draw_rate": 0.995,
+        "loss_rate": 0.005,
+        "non_loss_rate": 0.995,
+        "cumulative_reward": 117.39999999999999,
+        "average_reward": 0.2935,
+        "total_board_moves": 3596,
+        "average_board_moves": 8.99
+      }
+    }
+  },
+  "tabular_q_learning": {
+    "random": {
+      "X": {
+        "games": 200,
+        "wins": 197,
+        "draws": 3,
+        "losses": 0,
+        "win_rate": 0.985,
+        "draw_rate": 0.015,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 197.9,
+        "average_reward": 0.9895,
+        "total_board_moves": 1190,
+        "average_board_moves": 5.95
+      },
+      "O": {
+        "games": 200,
+        "wins": 186,
+        "draws": 14,
+        "losses": 0,
+        "win_rate": 0.93,
+        "draw_rate": 0.07,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 190.2,
+        "average_reward": 0.951,
+        "total_board_moves": 1330,
+        "average_board_moves": 6.65
+      },
+      "combined": {
+        "games": 400,
+        "wins": 383,
+        "draws": 17,
+        "losses": 0,
+        "win_rate": 0.9575,
+        "draw_rate": 0.0425,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 388.1,
+        "average_reward": 0.9702500000000001,
+        "total_board_moves": 2520,
+        "average_board_moves": 6.3
+      }
+    },
+    "tactical": {
+      "X": {
+        "games": 200,
+        "wins": 61,
+        "draws": 139,
+        "losses": 0,
+        "win_rate": 0.305,
+        "draw_rate": 0.695,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 102.69999999999999,
+        "average_reward": 0.5135,
+        "total_board_moves": 1678,
+        "average_board_moves": 8.39
+      },
+      "O": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "combined": {
+        "games": 400,
+        "wins": 61,
+        "draws": 339,
+        "losses": 0,
+        "win_rate": 0.1525,
+        "draw_rate": 0.8475,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 162.7,
+        "average_reward": 0.40674999999999994,
+        "total_board_moves": 3478,
+        "average_board_moves": 8.695
+      }
+    },
+    "minimax": {
+      "X": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "O": {
+        "games": 200,
+        "wins": 0,
+        "draws": 200,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 60.0,
+        "average_reward": 0.3,
+        "total_board_moves": 1800,
+        "average_board_moves": 9.0
+      },
+      "combined": {
+        "games": 400,
+        "wins": 0,
+        "draws": 400,
+        "losses": 0,
+        "win_rate": 0.0,
+        "draw_rate": 1.0,
+        "loss_rate": 0.0,
+        "non_loss_rate": 1.0,
+        "cumulative_reward": 120.0,
+        "average_reward": 0.3,
+        "total_board_moves": 3600,
+        "average_board_moves": 9.0
+      }
+    }
+  },
+  "history": [
+    {
+      "episode": 1000,
+      "epsilon": 0.9429982352941176,
+      "average_reward": -0.6079999999999998,
+      "non_loss_rate": 0.238,
+      "average_moves": 7.082,
+      "average_loss": 0.1266626007228087,
+      "updates": 832
+    },
+    {
+      "episode": 2000,
+      "epsilon": 0.8859394117647059,
+      "average_reward": -0.5955000000000003,
+      "non_loss_rate": 0.246,
+      "average_moves": 7.138,
+      "average_loss": 0.07176399863127506,
+      "updates": 1690
+    },
+    {
+      "episode": 3000,
+      "epsilon": 0.8288805882352941,
+      "average_reward": -0.5531999999999998,
+      "non_loss_rate": 0.278,
+      "average_moves": 7.191,
+      "average_loss": 0.06551498389290485,
+      "updates": 2557
+    },
+    {
+      "episode": 4000,
+      "epsilon": 0.7718217647058824,
+      "average_reward": -0.4999999999999987,
+      "non_loss_rate": 0.306,
+      "average_moves": 7.196,
+      "average_loss": 0.06340776992340882,
+      "updates": 3427
+    },
+    {
+      "episode": 5000,
+      "epsilon": 0.7147629411764707,
+      "average_reward": -0.46109999999999846,
+      "non_loss_rate": 0.337,
+      "average_moves": 7.239,
+      "average_loss": 0.06365380972912345,
+      "updates": 4305
+    },
+    {
+      "episode": 6000,
+      "epsilon": 0.6577041176470588,
+      "average_reward": -0.3567999999999982,
+      "non_loss_rate": 0.407,
+      "average_moves": 7.365,
+      "average_loss": 0.06397580321766062,
+      "updates": 5202
+    },
+    {
+      "episode": 7000,
+      "epsilon": 0.600645294117647,
+      "average_reward": -0.3223999999999981,
+      "non_loss_rate": 0.427,
+      "average_moves": 7.293,
+      "average_loss": 0.06310742504035372,
+      "updates": 6095
+    },
+    {
+      "episode": 8000,
+      "epsilon": 0.5435864705882354,
+      "average_reward": -0.2327999999999983,
+      "non_loss_rate": 0.49,
+      "average_moves": 7.503,
+      "average_loss": 0.059918457763148594,
+      "updates": 7019
+    },
+    {
+      "episode": 9000,
+      "epsilon": 0.48652764705882356,
+      "average_reward": -0.14349999999999963,
+      "non_loss_rate": 0.535,
+      "average_moves": 7.469,
+      "average_loss": 0.05897257132163092,
+      "updates": 7942
+    },
+    {
+      "episode": 10000,
+      "epsilon": 0.42946882352941174,
+      "average_reward": -0.0849000000000006,
+      "non_loss_rate": 0.586,
+      "average_moves": 7.609,
+      "average_loss": 0.052672453549882724,
+      "updates": 8887
+    },
+    {
+      "episode": 11000,
+      "epsilon": 0.37241,
+      "average_reward": -0.002699999999999896,
+      "non_loss_rate": 0.632,
+      "average_moves": 7.668,
+      "average_loss": 0.04993299430575948,
+      "updates": 9841
+    },
+    {
+      "episode": 12000,
+      "epsilon": 0.3153511764705882,
+      "average_reward": 0.08119999999999945,
+      "non_loss_rate": 0.682,
+      "average_moves": 7.695,
+      "average_loss": 0.04707863932303303,
+      "updates": 10804
+    },
+    {
+      "episode": 13000,
+      "epsilon": 0.2582923529411765,
+      "average_reward": 0.12399999999999926,
+      "non_loss_rate": 0.716,
+      "average_moves": 7.672,
+      "average_loss": 0.04385289570782334,
+      "updates": 11764
+    },
+    {
+      "episode": 14000,
+      "epsilon": 0.20123352941176476,
+      "average_reward": 0.21120000000000147,
+      "non_loss_rate": 0.768,
+      "average_moves": 7.77,
+      "average_loss": 0.038710599883384204,
+      "updates": 12741
+    },
+    {
+      "episode": 15000,
+      "epsilon": 0.14417470588235304,
+      "average_reward": 0.2785000000000022,
+      "non_loss_rate": 0.816,
+      "average_moves": 7.837,
+      "average_loss": 0.03687806602219841,
+      "updates": 13727
+    },
+    {
+      "episode": 16000,
+      "epsilon": 0.08711588235294121,
+      "average_reward": 0.34890000000000354,
+      "non_loss_rate": 0.868,
+      "average_moves": 7.946,
+      "average_loss": 0.032777458556419406,
+      "updates": 14731
+    },
+    {
+      "episode": 17000,
+      "epsilon": 0.030057058823529492,
+      "average_reward": 0.48710000000000436,
+      "non_loss_rate": 0.949,
+      "average_moves": 7.961,
+      "average_loss": 0.028527679638752697,
+      "updates": 15741
+    },
+    {
+      "episode": 18000,
+      "epsilon": 0.030000000000000027,
+      "average_reward": 0.5032000000000049,
+      "non_loss_rate": 0.963,
+      "average_moves": 8.076,
+      "average_loss": 0.024444319880018855,
+      "updates": 16768
+    },
+    {
+      "episode": 19000,
+      "epsilon": 0.030000000000000027,
+      "average_reward": 0.5053000000000047,
+      "non_loss_rate": 0.963,
+      "average_moves": 8.038,
+      "average_loss": 0.021119201655274332,
+      "updates": 17789
+    },
+    {
+      "episode": 20000,
+      "epsilon": 0.030000000000000027,
+      "average_reward": 0.47150000000000497,
+      "non_loss_rate": 0.951,
+      "average_moves": 8.071,
+      "average_loss": 0.01933729387155836,
+      "updates": 18813
+    }
+  ]
+}

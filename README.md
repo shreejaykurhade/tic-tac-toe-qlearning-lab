@@ -1,12 +1,12 @@
-# Tic-Tac-Toe with Q-Learning
+# Tic-Tac-Toe with Q-Learning and DQN
 
-A Reinforcement Learning Lab CA mini project: train a tabular Q-learning agent and play Tic-Tac-Toe in a **Python notebook**. The board sits on the left; the Q-values for each AI decision appear on the right.
+A Reinforcement Learning Lab CA mini project: train both a tabular Q-learning agent and a Deep Q-Network (DQN), then play either one in the **same Python notebook**. The board sits on the left; the selected AI's action values appear on the right.
 
-The agent learns from game outcomes and selects moves from its Q-table. Minimax is used during training, never to choose moves in the playable notebook.
+Both agents learn from game outcomes. The tabular agent stores values in a Q-table; DQN predicts values with a small neural network. Minimax is used during training and evaluation, never to choose moves in the playable notebook.
 
 ## Explain the project to faculty
 
-**One-minute explanation:** “My project trains a Tic-Tac-Toe agent with tabular Q-learning. A state is the nine-square board written from the agent's point of view. An action is one empty square. The Q-table stores an estimated future reward for each state–action pair. During 160,000 self-contained training games, the agent explores legal moves, observes the opponent's reply, receives a reward for a win, draw, or loss, and updates one Q-value using the Bellman equation. After training, it stops exploring and chooses the legal move with the highest Q-value. I compare it with random, tactical, and minimax opponents, and I show the learned values and decisions in an offline Python notebook.”
+**One-minute explanation:** “My project compares tabular Q-learning with DQN on Tic-Tac-Toe. A state is the nine-square board from the AI's point of view; an action is an empty square. The tabular agent stores an estimated future reward for each state and action. DQN predicts the same nine action values with a neural network and learns from replayed moves using a target network. Both learn from wins, draws, and losses. I compare their results against random, tactical, and minimax opponents, and I can switch between them in the same offline Python game.”
 
 The complete flow is:
 
@@ -57,6 +57,14 @@ Here `α = 0.15` controls how far the old value moves toward the target, and `γ
 6. After training, the notebook tests the greedy agent against random, tactical, and minimax opponents and runs 1,000 games for each human opening. It displays learning curves, opening comparisons, and action-value graphs.
 7. In the playable [`NotebookTicTacToe` class](scripts/build_one_cell_notebook.py), the human clicks a square; the trained agent reads that board's Q-values, chooses a legal maximal-Q square with `ε = 0`, and updates the board. The 3×3 value panel and bar chart explain that exact decision. The widget source is generated into the one-cell notebook by [`scripts/build_one_cell_notebook.py`](scripts/build_one_cell_notebook.py).
 
+### How DQN differs
+
+The [DQN agent](tictactoe/dqn.py) uses the **same board rules, legal-action masking, rewards, and Bellman target** as the Q-table agent. Its state becomes 18 inputs: nine indicators for the AI's marks and nine for the opponent's marks. A neural network with layers **18 → 64 → 64 → 9** predicts a value for each square.
+
+Instead of updating one stored table entry, DQN stores experiences `(state, action, reward, next_state, done)` in **replay memory**. It samples random batches, computes targets with a separate **target network**, and changes its neural-network weights by backpropagation. The target network is copied from the learning network every 250 gradient updates. Replay reduces dependence on the order of games; the target network makes the learning target less volatile. Occupied squares are excluded from both action selection and the next-state maximum.
+
+In the notebook, the tabular agent trains for **160,000 games** and DQN for **20,000 games**. These are different budgets, so the plot is a demonstration of how the implementations behave, **not a controlled claim that one algorithm is universally better**. The DQN training cell shows reward, non-loss rate, and replay loss. The game selector changes which agent supplies the displayed Q-values and move.
+
 The reward is `+1` for an AI win, `+0.3` for a draw, `−1` for an AI loss, and `0` before the game ends. A draw has a positive reward because drawing a perfect opponent is preferable to losing. The opponent policy is **part of training/evaluation**, while the deployed agent's move comes from its learned Q-table.
 
 ### How to explain the graphs
@@ -75,9 +83,9 @@ The reward is `+1` for an AI win, `+0.3` for a draw, `−1` for an AI loss, and 
 
 ## Play in Python
 
-Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and records a 3×3 Q-table **for each of the nine human opening squares every 1,000 games**. The checkpoint tables are grouped by opening in tabs. After training, the plots appear before the game: reward, success rate, and steps versus episode; outcomes and best Q-value by human opening; the best Q-value's training progress and win-rate progress for all nine openings; and nine AI-decision bar charts, one per opening. Expand the panels for the full training table and Q-table snapshots. The notebook also evaluates against random, tactical, and minimax opponents, then runs **1,000 games for each of the nine human first squares** against random X replies. These 9,000 games evaluate the trained, greedy policy; they do not update it. The playable 3×3 board sits beside its decision Q-values and an updating bar chart of all nine actions. Green marks the chosen action, blue marks other legal actions, and gray marks occupied squares. Choose X or O and use **New game** to reset. The notebook uses Python and `ipywidgets` for the game; a small inline style keeps button text black in dark notebook themes.
+Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains both agents. The tabular run records a 3×3 Q-table **for each of the nine human opening squares every 1,000 games**. The checkpoint tables are grouped by opening in tabs. The notebook displays standard RL curves, opening comparisons, DQN learning curves, and a Q-table-versus-DQN outcome chart. Expand the panels for the full training table and Q-table snapshots. The playable 3×3 board sits beside the selected agent's action values and an updating bar chart. First choose **Q-table** or **DQN**, then X or O. Green marks the chosen action, blue other legal actions, and gray occupied squares. Use **New game** to reset. A small inline style keeps button text black in dark notebook themes.
 
-For a class presentation, open the [complete commented Python code](notebooks/TicTacToe_All_In_One_Commented.py). It contains the same single-cell program as the notebook, with brief comments for the rules, Q-table, training, evaluation, plots, and game. Paste the file into a Jupyter code cell to run the interactive UI; the `.ipynb` version is ready to run and includes saved plots.
+For a class presentation, open the [complete commented Python code](notebooks/TicTacToe_All_In_One_Commented.py). It contains the same single-cell program as the notebook, with comments for the rules, Q-table, DQN network/replay, training, evaluation, plots, and game. Paste the file into a Jupyter code cell to run the interactive UI; the `.ipynb` version is ready to run and includes saved plots.
 
 Open the plots directly: [training curves](artifacts/plots/notebook_training_plots.png), [results by human opening](artifacts/plots/notebook_opening_graphs.png), [Q-value progress for all openings](artifacts/plots/notebook_opening_q_progress.png), and [AI decisions for all openings](artifacts/plots/notebook_ai_decisions_all_openings.png). The decision chart in the running notebook updates after every AI move.
 
@@ -87,12 +95,14 @@ Epsilon is a **global training setting**, so its schedule is the same for every 
 
 Direct PNGs: [reward](artifacts/plots/notebook_reward_vs_episode.png), [success rate](artifacts/plots/notebook_success_vs_episode.png), [steps](artifacts/plots/notebook_steps_vs_episode.png), [TD error](artifacts/plots/notebook_td_error_vs_episode.png), and [epsilon](artifacts/plots/notebook_epsilon_vs_episode.png).
 
+DQN PNGs: [training curves](artifacts/plots/notebook_dqn_training.png) and [Q-table versus DQN outcomes](artifacts/plots/notebook_q_vs_dqn.png).
+
 ```bash
 python -m pip install -r requirements.txt
 jupyter notebook notebooks/TicTacToe_All_In_One.ipynb
 ```
 
-The default 160,000-game run uses the same training configuration as the project and was checked against all 627 saved canonical states. Edit `EPISODES` in the notebook for a shorter demonstration. The interface uses `ipywidgets` and runs locally with Python and Jupyter.
+The default tabular run is 160,000 games; the DQN run is 20,000 games. Edit `EPISODES` or `DQN_EPISODES` in the notebook for a shorter demonstration. The interface uses `ipywidgets` and runs locally with Python and Jupyter.
 
 ![Offline game with learned action values](artifacts/screenshots/offline_game_qvalues.jpg)
 
@@ -102,7 +112,7 @@ The default 160,000-game run uses the same training configuration as the project
 2. Double-click **`TicTacToe_Offline.html`** to open it in Chrome, Edge, Firefox, or another modern browser.
 3. Choose X or O and play. X always starts.
 
-The standalone HTML includes the UI and trained model. **No internet, Python installation, server, or API key is needed to play.** Keep just this file if you only want the game.
+The standalone HTML includes the UI and the **tabular Q-learning model**. DQN is available in the Python notebook. **No internet, Python installation, server, or API key is needed to play the HTML version.** Keep just this file if you only want that game.
 
 Features include a responsive layout, keyboard navigation, a per-opponent scorecard, a random baseline opponent, and a toggle showing the agent's learned action values. The model remains fixed while you play. If browser storage is restricted, gameplay still works, but scores may not persist.
 
@@ -159,12 +169,13 @@ cd tic-tac-toe-qlearning-lab
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python -m tictactoe.train --episodes 160000 --seed 42 --output artifacts --evaluation-games 2000
+python -m tictactoe.dqn_experiment
 python scripts/build_offline.py
 ```
 
 The final command rebuilds the standalone HTML and `artifacts/model.js` using your newly trained model. Training alone does not replace the model embedded in the standalone game.
 
-Training writes the Q-table, summary, final evaluation, CSV logs, and four PNG plots into `artifacts/`. The game rules and learning engine use the Python standard library; Matplotlib and NumPy support plotting.
+Tabular training writes the Q-table, summary, final evaluation, CSV logs, and four PNG plots into `artifacts/`. The DQN command writes its weights, comparison results, and plots into [`artifacts/dqn/`](artifacts/dqn/results.json). The board rules and tabular agent use the Python standard library; the DQN uses NumPy for its neural-network calculations, and Matplotlib makes the plots.
 
 For a short demonstration, reduce `--episodes`. A shorter run can produce different performance from the included model. Repeat multiple seeds when comparing algorithms; the reported results come from one training seed.
 
@@ -216,6 +227,8 @@ index.html / styles.css / app.js Editable browser UI source
 tictactoe/
   core.py                       Rules, symmetry transforms, opponent policies
   agent.py                      Q-learning and model export/load
+  dqn.py                        NumPy DQN, replay memory, target network
+  dqn_experiment.py             DQN training and comparison
   train.py                      Training, experiment output, plots
   evaluate.py                   Baseline evaluation and adversarial audit
 notebooks/                      Executed, self-contained notebook

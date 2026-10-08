@@ -1,4 +1,4 @@
-# One Python cell: rules, Q-learning agent, training, results, and game.
+# One Python cell: board rules, tabular Q-learning, DQN, plots, and game.
 # Part 1: board rules and training opponents.
 """Board rules and opponents used to train the Q-learning agent."""
 
@@ -216,6 +216,227 @@ class QLearningAgent:
         # new Q = old Q + alpha * (target - old Q).
         values[canonical_action] += self.alpha * td_error
         return abs(td_error)
+
+
+# Part 3: DQN neural network, replay memory, and target network.
+"""A small NumPy DQN for the same Tic-Tac-Toe states and rewards."""
+
+from collections import deque
+import random
+
+import numpy as np
+
+
+
+def state_vector(state: str) -> np.ndarray:
+    """Encode nine squares as 18 inputs: AI marks, then opponent marks."""
+    return np.array([float(cell == "1") for cell in state] +
+                    [float(cell == "2") for cell in state], dtype=np.float32)
+
+
+class DQNAgent:
+    """Neural Q-values with replay memory and a slowly updated target network."""
+
+    def __init__(self, alpha: float = 0.001, gamma: float = 0.97, seed: int = 42,
+                 memory_size: int = 20_000, batch_size: int = 64,
+                 target_interval: int = 250):
+        self.alpha, self.gamma = alpha, gamma
+        self.batch_size, self.target_interval = batch_size, target_interval
+        self.rng = random.Random(seed)
+        weights = np.random.default_rng(seed)
+        sizes = (18, 64, 64, 9)
+        # The online network learns; the target network provides stable targets.
+        self.online = {
+            f"{kind}{i}": (weights.normal(0, (2 / sizes[i]) ** 0.5,
+                                          (sizes[i], sizes[i + 1])).astype(np.float32)
+                           if kind == "W" else np.zeros(sizes[i + 1], np.float32))
+            for i in range(3) for kind in ("W", "b")
+        }
+        self.target = {key: value.copy() for key, value in self.online.items()}
+        self.first = {key: np.zeros_like(value) for key, value in self.online.items()}
+        self.second = {key: np.zeros_like(value) for key, value in self.online.items()}
+        self.memory = deque(maxlen=memory_size)
+        self.updates = 0
+
+    @staticmethod
+    def _forward(inputs: np.ndarray, network: dict[str, np.ndarray]):
+        hidden1 = np.maximum(inputs @ network["W0"] + network["b0"], 0)
+        hidden2 = np.maximum(hidden1 @ network["W1"] + network["b1"], 0)
+        values = hidden2 @ network["W2"] + network["b2"]
+        return hidden1, hidden2, values
+
+    def values(self, state: str) -> list[float]:
+        """Predict one Q-value for each board square."""
+        inputs = state_vector(state)[None, :]
+        return self._forward(inputs, self.online)[-1][0].tolist()
+
+    def select_action(self, board: Board, agent_mark: int, epsilon: float = 0.0,
+                      rng: random.Random | None = None) -> int:
+        """Explore during training; otherwise choose the best legal square."""
+        rng = rng or self.rng
+        actions = legal_actions(board)
+        if not actions:
+            raise ValueError("No legal action in a terminal state.")
+        if rng.random() < epsilon:
+            return rng.choice(actions)
+        values = self.values(encode_state(board, agent_mark))
+        best = max(values[action] for action in actions)
+        return rng.choice([action for action in actions
+                           if abs(values[action] - best) <= 1e-7])
+
+    def remember(self, state: str, action: int, reward: float,
+                 next_state: str | None, done: bool) -> None:
+        """Store an AI move and the resulting board after the opponent replies."""
+        if state[action] != "0":
+            raise ValueError("Cannot learn an occupied action.")
+        self.memory.append((state, action, reward, next_state, done))
+
+    def train_step(self) -> float | None:
+        """Learn from a random replay batch; return its Huber loss."""
+        if len(self.memory) < self.batch_size:
+            return None
+        batch = self.rng.sample(self.memory, self.batch_size)
+        states = np.stack([state_vector(item[0]) for item in batch])
+        actions = np.array([item[1] for item in batch], dtype=np.int64)
+        rewards = np.array([item[2] for item in batch], dtype=np.float32)
+        done = np.array([item[4] for item in batch], dtype=bool)
+        next_states = [item[3] for item in batch]
+
+        # Target Q uses a frozen network and ignores occupied squares.
+        next_inputs = np.stack([state_vector(state or "000000000") for state in next_states])
+        next_values = self._forward(next_inputs, self.target)[-1]
+        legal = np.array([[cell == "0" for cell in (state or "111111111")]
+                          for state in next_states])
+        next_values = np.where(legal, next_values, -np.inf)
+        next_best = np.max(next_values, axis=1)
+        next_best[done] = 0.0
+        targets = rewards + self.gamma * next_best
+
+        hidden1, hidden2, predictions = self._forward(states, self.online)
+        error = predictions[np.arange(self.batch_size), actions] - targets
+        absolute = np.abs(error)
+        loss = np.where(absolute <= 1, 0.5 * error ** 2, absolute - 0.5).mean()
+        # Huber loss limits large errors; backpropagation changes all layers.
+        output_gradient = np.zeros_like(predictions)
+        output_gradient[np.arange(self.batch_size), actions] = np.clip(error, -1, 1) / self.batch_size
+        middle_gradient = (output_gradient @ self.online["W2"].T) * (hidden2 > 0)
+        first_gradient = (middle_gradient @ self.online["W1"].T) * (hidden1 > 0)
+        gradients = {
+            "W2": hidden2.T @ output_gradient, "b2": output_gradient.sum(axis=0),
+            "W1": hidden1.T @ middle_gradient, "b1": middle_gradient.sum(axis=0),
+            "W0": states.T @ first_gradient, "b0": first_gradient.sum(axis=0),
+        }
+        # Adam keeps a running average of gradients for steady learning.
+        self.updates += 1
+        for key, gradient in gradients.items():
+            self.first[key] = 0.9 * self.first[key] + 0.1 * gradient
+            self.second[key] = 0.999 * self.second[key] + 0.001 * gradient ** 2
+            mean = self.first[key] / (1 - 0.9 ** self.updates)
+            variance = self.second[key] / (1 - 0.999 ** self.updates)
+            self.online[key] -= self.alpha * mean / (np.sqrt(variance) + 1e-8)
+        if self.updates % self.target_interval == 0:
+            self.target = {key: value.copy() for key, value in self.online.items()}
+        return float(loss)
+
+# Part 4: DQN training and comparison helpers.
+"""Train and compare the neural DQN with the tabular Q-learning agent."""
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+import random
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+
+@dataclass
+class DQNConfig:
+    episodes: int = 20_000
+    seed: int = 42
+    evaluation_games_per_role: int = 200
+    replay_every: int = 4
+    history_interval: int = 1_000
+
+
+def train(config: DQNConfig, progress: bool = True):
+    """Train a DQN using the same game and terminal rewards as tabular Q-learning."""
+    agent = DQNAgent(seed=config.seed)
+    opponent_rng = random.Random(config.seed + 1)
+    history = []
+    moves_seen = 0
+    window = {"games": 0, "reward": 0.0, "non_loss": 0, "moves": 0,
+              "loss": 0.0, "updates": 0}
+    for episode in range(1, config.episodes + 1):
+        mark = X if episode % 2 else O
+        board, board_moves = EMPTY_BOARD, 0
+        if mark == O:
+            board = play(board, mixture_action(board, X, opponent_rng,
+                                               (0.25, 0.15, 0.60)), X)
+            board_moves += 1
+        fraction = min(1.0, (episode - 1) / max(1, config.episodes * 0.85))
+        epsilon = 1.0 + fraction * (0.03 - 1.0)
+        while True:
+            state = encode_state(board, mark)
+            action = agent.select_action(board, mark, epsilon)
+            board = play(board, action, mark)
+            board_moves += 1
+            if not terminal(board):
+                reply = mixture_action(board, other(mark), opponent_rng,
+                                       (0.25, 0.15, 0.60))
+                board = play(board, reply, other(mark))
+                board_moves += 1
+            done = terminal(board)
+            result = winner(board)
+            reward = ((1.0 if result == mark else -1.0) if result else 0.3) if done else 0.0
+            agent.remember(state, action, reward,
+                           None if done else encode_state(board, mark), done)
+            moves_seen += 1
+            if moves_seen % config.replay_every == 0:
+                loss = agent.train_step()
+                if loss is not None:
+                    window["loss"] += loss
+                    window["updates"] += 1
+            if done:
+                break
+        window["games"] += 1
+        window["reward"] += reward
+        window["non_loss"] += result != other(mark)
+        window["moves"] += board_moves
+        if episode % config.history_interval == 0 or episode == config.episodes:
+            games = window["games"]
+            history.append({"episode": episode, "epsilon": epsilon,
+                            "average_reward": window["reward"] / games,
+                            "non_loss_rate": window["non_loss"] / games,
+                            "average_moves": window["moves"] / games,
+                            "average_loss": window["loss"] / max(window["updates"], 1),
+                            "updates": agent.updates})
+            if progress:
+                print(f"{episode:,}/{config.episodes:,} games | "
+                      f"reward {history[-1]['average_reward']:+.3f} | "
+                      f"non-loss {history[-1]['non_loss_rate']:.1%}")
+            window = {"games": 0, "reward": 0.0, "non_loss": 0, "moves": 0,
+                      "loss": 0.0, "updates": 0}
+    return agent, history
+
+
+def make_plots(history: list[dict], output: Path) -> None:
+    """Save DQN training curves for the lab comparison."""
+    output.mkdir(parents=True, exist_ok=True)
+    xs = [row["episode"] for row in history]
+    for filename, key, title, ylabel, color in (
+        ("reward.png", "average_reward", "DQN reward vs episode", "Mean reward", "#2563eb"),
+        ("success.png", "non_loss_rate", "DQN non-loss vs episode", "Win + draw rate", "#059669"),
+        ("loss.png", "average_loss", "DQN replay loss vs episode", "Huber loss", "#dc2626"),
+    ):
+        fig, ax = plt.subplots(figsize=(8, 4), constrained_layout=True)
+        ax.plot(xs, [row[key] for row in history], color=color, linewidth=2)
+        ax.set(title=title, xlabel="Training episode", ylabel=ylabel)
+        ax.grid(alpha=0.2)
+        fig.savefig(output / filename, dpi=150, facecolor="white")
+        plt.close(fig)
+
 
 
 
@@ -579,18 +800,95 @@ fig.suptitle("AI first decision for each human opening (green = chosen)")
 print("\nAI DECISION GRAPHS: all nine human starting squares")
 display(Image(data=figure_png(fig)))
 
+# Train a neural DQN on the same board and rewards as the tabular agent.
+DQN_EPISODES = 20_000
+dqn_agent, dqn_history = train(DQNConfig(episodes=DQN_EPISODES, seed=SEED),
+                               progress=False)
+print(f"\nDQN training complete: {DQN_EPISODES:,} games; "
+      f"final training non-loss {dqn_history[-1]['non_loss_rate']:.1%}")
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
+for ax, key, title, ylabel, color in zip(
+    axes,
+    ("average_reward", "non_loss_rate", "average_loss"),
+    ("DQN reward", "DQN success rate", "DQN replay loss"),
+    ("Mean reward", "Wins + draws / games", "Huber loss"),
+    ("#2563eb", "#059669", "#dc2626"),
+):
+    ax.plot([row["episode"] for row in dqn_history],
+            [row[key] for row in dqn_history], color=color, linewidth=2)
+    ax.set(title=title, xlabel="DQN training episode", ylabel=ylabel)
+    ax.grid(alpha=0.2)
+axes[1].set_ylim(0, 1.05)
+print("\nDQN TRAINING PLOTS: reward, success rate, and replay loss")
+display(Image(data=figure_png(fig)))
+
+def compare_policy(model, weights, seed, games=400):
+    # Both agents play the same number of greedy evaluation games.
+    rng = random.Random(seed)
+    wins = draws = losses = 0
+    for game_number in range(games):
+        mark = X if game_number % 2 == 0 else O
+        board = EMPTY_BOARD
+        while not terminal(board):
+            turn = X if sum(cell != 0 for cell in board) % 2 == 0 else O
+            action = (model.select_action(board, mark, epsilon=0.0, rng=rng)
+                      if turn == mark else mixture_action(board, turn, rng, weights))
+            board = play(board, action, turn)
+        result = winner(board)
+        wins += result == mark
+        draws += result == 0
+        losses += result == other(mark)
+    return wins, draws, losses
+
+print("\nGREEDY COMPARISON: 400 games per opponent; Q-table trained 160k, DQN trained 20k")
+print(f"{'Agent':<12} {'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7}")
+comparison = []
+for index, (name, weights) in enumerate((("Random", (1, 0, 0)),
+                                         ("Tactical", (0, 1, 0)),
+                                         ("Minimax", (0, 0, 1)))):
+    for label, model in (("Q-table", agent), ("DQN", dqn_agent)):
+        wins, draws, losses = compare_policy(model, weights, SEED + 8000 + index)
+        comparison.append((label, name, wins, draws, losses))
+        print(f"{label:<12} {name:<10} {wins:5d} {draws:6d} {losses:7d}")
+
+fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+positions = np.arange(len(comparison))
+win_rates = [row[2] / 400 for row in comparison]
+draw_rates = [row[3] / 400 for row in comparison]
+loss_rates = [row[4] / 400 for row in comparison]
+ax.bar(positions, win_rates, label="Wins", color="#16a34a")
+ax.bar(positions, draw_rates, bottom=win_rates, label="Draws", color="#94a3b8")
+ax.bar(positions, loss_rates,
+       bottom=[w + d for w, d in zip(win_rates, draw_rates)],
+       label="Losses", color="#dc2626")
+ax.set_xticks(positions, [f"{row[1]}\n{row[0]}" for row in comparison])
+ax.set(title="Greedy game outcomes (different training budgets)",
+       ylabel="Share of 400 games", ylim=(0, 1.05))
+ax.legend(loc="lower right")
+ax.grid(axis="y", alpha=0.2)
+print("\nQ-LEARNING VS DQN: wins, draws, and losses; training budgets differ")
+display(Image(data=figure_png(fig)))
+
 
 class NotebookTicTacToe:
     """Let a human play while showing why the trained AI chose its move."""
-    def __init__(self, trained_agent):
-        self.agent = trained_agent
+    def __init__(self, tabular_agent, neural_agent):
+        self.agents = {"Q-table": tabular_agent, "DQN": neural_agent}
+        self.model_name = "Q-table"
+        self.agent = tabular_agent
         self.board = EMPTY_BOARD
         self.human_mark = X
         self.agent_mark = O
         self.finished = False
 
-        self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING")
+        self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING / DQN")
         self.status = widgets.Label()
+        self.tabular_button = widgets.Button(description="Q-table", layout=widgets.Layout(width="120px"))
+        self.dqn_button = widgets.Button(description="DQN", layout=widgets.Layout(width="120px"))
+        self.tabular_button.on_click(lambda _: self._change_model("Q-table"))
+        self.dqn_button.on_click(lambda _: self._change_model("DQN"))
+        self.model_choice = widgets.HBox([self.tabular_button, self.dqn_button])
         self.play_x = widgets.Button(description="Play as X", layout=widgets.Layout(width="120px"))
         self.play_o = widgets.Button(description="Play as O", layout=widgets.Layout(width="120px"))
         self.play_x.on_click(lambda _: self._change_side(X))
@@ -629,7 +927,8 @@ class NotebookTicTacToe:
             -webkit-text-fill-color: #000 !important;
         }
         </style>""")
-        for button in (self.play_x, self.play_o, self.new_game, *self.cells, *self.q_cells):
+        for button in (self.tabular_button, self.dqn_button, self.play_x, self.play_o,
+                       self.new_game, *self.cells, *self.q_cells):
             button.add_class("rl-black-text")
             button.style.text_color = "#000000"
 
@@ -641,7 +940,8 @@ class NotebookTicTacToe:
             self.q_cells,
             layout=widgets.Layout(grid_template_columns="repeat(3, 92px)", grid_gap="5px"),
         )
-        left = widgets.VBox([self.font_fix, self.title, self.side, self.status, board_grid, self.new_game])
+        left = widgets.VBox([self.font_fix, self.title, self.model_choice,
+                             self.side, self.status, board_grid, self.new_game])
         right = widgets.VBox([self.q_title, self.q_state, q_grid,
                               self.q_choice, self.decision_chart])
         self.widget = widgets.HBox(
@@ -654,6 +954,18 @@ class NotebookTicTacToe:
         self.human_mark = mark
         self.agent_mark = other(mark)
         self.reset()
+
+    def _change_model(self, name):
+        self.model_name = name
+        self.agent = self.agents[name]
+        self.reset()
+
+    def _draw_model_choice(self):
+        for button, name in ((self.tabular_button, "Q-table"),
+                             (self.dqn_button, "DQN")):
+            button.style.button_color = "#50d99a" if name == self.model_name else "#f8fafc"
+            button.style.text_color = "#000000"
+            button.style.font_weight = "bold"
 
     def _draw_side(self):
         for button, mark in ((self.play_x, X), (self.play_o, O)):
@@ -688,8 +1000,10 @@ class NotebookTicTacToe:
         # Clear the board and hide the chart until the next AI move.
         self.board = EMPTY_BOARD
         self.finished = False
+        self._draw_model_choice()
         self._draw_side()
-        self.q_state.value = "Make a move to see the Q-table."
+        self.q_title.value = ("Q-values from the " + self.model_name + " at the AI's decision")
+        self.q_state.value = "Make a move to see the AI's values."
         self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
         self.decision_chart.value = b""
         self.decision_chart.layout.display = "none"
@@ -739,5 +1053,5 @@ class NotebookTicTacToe:
         self._finish_or_continue()
 
 
-game = NotebookTicTacToe(agent)
+game = NotebookTicTacToe(agent, dqn_agent)
 display(game.widget)

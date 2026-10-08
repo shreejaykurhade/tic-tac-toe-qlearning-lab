@@ -11,9 +11,11 @@ COMMENTED_CODE = ROOT / "notebooks/TicTacToe_All_In_One_Commented.py"
 
 def module_source(filename: str) -> str:
     source = (ROOT / "tictactoe" / filename).read_text(encoding="utf-8")
-    source = re.sub(r"(?m)^from \.core import [^\n]*\n", "", source)
+    source = re.sub(r"(?m)^from \.(?:core|agent|dqn|evaluate) import [^\n]*\n", "", source)
     if filename == "agent.py":
         source = source.split("    def export(", 1)[0]
+    if filename == "dqn_experiment.py":
+        source = source.split("def run(", 1)[0]
     return source
 
 
@@ -378,18 +380,95 @@ fig.suptitle("AI first decision for each human opening (green = chosen)")
 print("\\nAI DECISION GRAPHS: all nine human starting squares")
 display(Image(data=figure_png(fig)))
 
+# Train a neural DQN on the same board and rewards as the tabular agent.
+DQN_EPISODES = 20_000
+dqn_agent, dqn_history = train(DQNConfig(episodes=DQN_EPISODES, seed=SEED),
+                               progress=False)
+print(f"\\nDQN training complete: {DQN_EPISODES:,} games; "
+      f"final training non-loss {dqn_history[-1]['non_loss_rate']:.1%}")
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
+for ax, key, title, ylabel, color in zip(
+    axes,
+    ("average_reward", "non_loss_rate", "average_loss"),
+    ("DQN reward", "DQN success rate", "DQN replay loss"),
+    ("Mean reward", "Wins + draws / games", "Huber loss"),
+    ("#2563eb", "#059669", "#dc2626"),
+):
+    ax.plot([row["episode"] for row in dqn_history],
+            [row[key] for row in dqn_history], color=color, linewidth=2)
+    ax.set(title=title, xlabel="DQN training episode", ylabel=ylabel)
+    ax.grid(alpha=0.2)
+axes[1].set_ylim(0, 1.05)
+print("\\nDQN TRAINING PLOTS: reward, success rate, and replay loss")
+display(Image(data=figure_png(fig)))
+
+def compare_policy(model, weights, seed, games=400):
+    # Both agents play the same number of greedy evaluation games.
+    rng = random.Random(seed)
+    wins = draws = losses = 0
+    for game_number in range(games):
+        mark = X if game_number % 2 == 0 else O
+        board = EMPTY_BOARD
+        while not terminal(board):
+            turn = X if sum(cell != 0 for cell in board) % 2 == 0 else O
+            action = (model.select_action(board, mark, epsilon=0.0, rng=rng)
+                      if turn == mark else mixture_action(board, turn, rng, weights))
+            board = play(board, action, turn)
+        result = winner(board)
+        wins += result == mark
+        draws += result == 0
+        losses += result == other(mark)
+    return wins, draws, losses
+
+print("\\nGREEDY COMPARISON: 400 games per opponent; Q-table trained 160k, DQN trained 20k")
+print(f"{'Agent':<12} {'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7}")
+comparison = []
+for index, (name, weights) in enumerate((("Random", (1, 0, 0)),
+                                         ("Tactical", (0, 1, 0)),
+                                         ("Minimax", (0, 0, 1)))):
+    for label, model in (("Q-table", agent), ("DQN", dqn_agent)):
+        wins, draws, losses = compare_policy(model, weights, SEED + 8000 + index)
+        comparison.append((label, name, wins, draws, losses))
+        print(f"{label:<12} {name:<10} {wins:5d} {draws:6d} {losses:7d}")
+
+fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+positions = np.arange(len(comparison))
+win_rates = [row[2] / 400 for row in comparison]
+draw_rates = [row[3] / 400 for row in comparison]
+loss_rates = [row[4] / 400 for row in comparison]
+ax.bar(positions, win_rates, label="Wins", color="#16a34a")
+ax.bar(positions, draw_rates, bottom=win_rates, label="Draws", color="#94a3b8")
+ax.bar(positions, loss_rates,
+       bottom=[w + d for w, d in zip(win_rates, draw_rates)],
+       label="Losses", color="#dc2626")
+ax.set_xticks(positions, [f"{row[1]}\\n{row[0]}" for row in comparison])
+ax.set(title="Greedy game outcomes (different training budgets)",
+       ylabel="Share of 400 games", ylim=(0, 1.05))
+ax.legend(loc="lower right")
+ax.grid(axis="y", alpha=0.2)
+print("\\nQ-LEARNING VS DQN: wins, draws, and losses; training budgets differ")
+display(Image(data=figure_png(fig)))
+
 
 class NotebookTicTacToe:
     """Let a human play while showing why the trained AI chose its move."""
-    def __init__(self, trained_agent):
-        self.agent = trained_agent
+    def __init__(self, tabular_agent, neural_agent):
+        self.agents = {"Q-table": tabular_agent, "DQN": neural_agent}
+        self.model_name = "Q-table"
+        self.agent = tabular_agent
         self.board = EMPTY_BOARD
         self.human_mark = X
         self.agent_mark = O
         self.finished = False
 
-        self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING")
+        self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING / DQN")
         self.status = widgets.Label()
+        self.tabular_button = widgets.Button(description="Q-table", layout=widgets.Layout(width="120px"))
+        self.dqn_button = widgets.Button(description="DQN", layout=widgets.Layout(width="120px"))
+        self.tabular_button.on_click(lambda _: self._change_model("Q-table"))
+        self.dqn_button.on_click(lambda _: self._change_model("DQN"))
+        self.model_choice = widgets.HBox([self.tabular_button, self.dqn_button])
         self.play_x = widgets.Button(description="Play as X", layout=widgets.Layout(width="120px"))
         self.play_o = widgets.Button(description="Play as O", layout=widgets.Layout(width="120px"))
         self.play_x.on_click(lambda _: self._change_side(X))
@@ -428,7 +507,8 @@ class NotebookTicTacToe:
             -webkit-text-fill-color: #000 !important;
         }
         </style>""")
-        for button in (self.play_x, self.play_o, self.new_game, *self.cells, *self.q_cells):
+        for button in (self.tabular_button, self.dqn_button, self.play_x, self.play_o,
+                       self.new_game, *self.cells, *self.q_cells):
             button.add_class("rl-black-text")
             button.style.text_color = "#000000"
 
@@ -440,7 +520,8 @@ class NotebookTicTacToe:
             self.q_cells,
             layout=widgets.Layout(grid_template_columns="repeat(3, 92px)", grid_gap="5px"),
         )
-        left = widgets.VBox([self.font_fix, self.title, self.side, self.status, board_grid, self.new_game])
+        left = widgets.VBox([self.font_fix, self.title, self.model_choice,
+                             self.side, self.status, board_grid, self.new_game])
         right = widgets.VBox([self.q_title, self.q_state, q_grid,
                               self.q_choice, self.decision_chart])
         self.widget = widgets.HBox(
@@ -453,6 +534,18 @@ class NotebookTicTacToe:
         self.human_mark = mark
         self.agent_mark = other(mark)
         self.reset()
+
+    def _change_model(self, name):
+        self.model_name = name
+        self.agent = self.agents[name]
+        self.reset()
+
+    def _draw_model_choice(self):
+        for button, name in ((self.tabular_button, "Q-table"),
+                             (self.dqn_button, "DQN")):
+            button.style.button_color = "#50d99a" if name == self.model_name else "#f8fafc"
+            button.style.text_color = "#000000"
+            button.style.font_weight = "bold"
 
     def _draw_side(self):
         for button, mark in ((self.play_x, X), (self.play_o, O)):
@@ -487,8 +580,10 @@ class NotebookTicTacToe:
         # Clear the board and hide the chart until the next AI move.
         self.board = EMPTY_BOARD
         self.finished = False
+        self._draw_model_choice()
         self._draw_side()
-        self.q_state.value = "Make a move to see the Q-table."
+        self.q_title.value = ("Q-values from the " + self.model_name + " at the AI's decision")
+        self.q_state.value = "Make a move to see the AI's values."
         self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
         self.decision_chart.value = b""
         self.decision_chart.layout.display = "none"
@@ -538,18 +633,22 @@ class NotebookTicTacToe:
         self._finish_or_continue()
 
 
-game = NotebookTicTacToe(agent)
+game = NotebookTicTacToe(agent, dqn_agent)
 display(game.widget)
 '''
 
 
 def build():
     code = "\n".join([
-        "# One Python cell: rules, Q-learning agent, training, results, and game.",
+        "# One Python cell: board rules, tabular Q-learning, DQN, plots, and game.",
         "# Part 1: board rules and training opponents.",
         module_source("core.py"),
         "# Part 2: Q-table, action selection, and learning update.",
         module_source("agent.py"),
+        "# Part 3: DQN neural network, replay memory, and target network.",
+        module_source("dqn.py"),
+        "# Part 4: DQN training and comparison helpers.",
+        module_source("dqn_experiment.py"),
         DEMO,
     ])
     compile(code, str(DESTINATION), "exec")
@@ -557,14 +656,16 @@ def build():
     notebook = nbf.v4.new_notebook(
         cells=[
             nbf.v4.new_markdown_cell(
-                "# Tic-Tac-Toe Q-learning — Python board\n\n"
-                "Run the code cell to train, inspect results, and play. "
-                "The board is on the left; the AI's decision Q-values are on the right. "
-                "Choose X or O, or press **New game**.\n\n"
+                "# Tic-Tac-Toe: Q-learning and DQN — Python board\n\n"
+                "Run the single code cell to train both agents, inspect results, and play. "
+                "Choose **Q-table** or **DQN**, then choose X or O. The board is on the left; "
+                "the selected agent's Q-values and decision chart are on the right.\n\n"
                 "To explain it: **state** = board from the AI's view (0 empty, 1 AI, 2 you); "
                 "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
                 "**Q-learning** updates move values after each game turn.\n\n"
-                "Default: 160,000 training games. The cell prints an opening-state "
+                "The tabular agent trains for 160,000 games; the DQN trains for 20,000 games "
+                "using a neural network, replay memory, and a target network. The different "
+                "budgets are shown in the comparison. The cell prints an opening-state "
                 "Q-table for each human opening every 1,000 games, then a training "
                 "table, opponent evaluation, and reward, success-rate, and steps plots. "
                 "It also evaluates 1,000 games for each of the nine human opening squares, "
@@ -574,7 +675,7 @@ def build():
                 "and AI decisions for all nine openings. "
                 "Expand the panels for full tables and Q-table snapshots, grouped by opening. "
                 "Each AI move also updates a Q-value bar chart. "
-                "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "
+                "Edit `EPISODES`, `DQN_EPISODES`, or `OPENING_GAMES` for a shorter run. "
                 "Requires Python 3.10+, Jupyter, `ipywidgets`, and Matplotlib."
             ),
             nbf.v4.new_code_cell(code),
