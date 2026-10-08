@@ -4,9 +4,78 @@ A Reinforcement Learning Lab CA mini project: train a tabular Q-learning agent a
 
 The agent learns from game outcomes and selects moves from its Q-table. Minimax is used during training, never to choose moves in the playable notebook.
 
+## Explain the project to faculty
+
+**One-minute explanation:** “My project trains a Tic-Tac-Toe agent with tabular Q-learning. A state is the nine-square board written from the agent's point of view. An action is one empty square. The Q-table stores an estimated future reward for each state–action pair. During 160,000 self-contained training games, the agent explores legal moves, observes the opponent's reply, receives a reward for a win, draw, or loss, and updates one Q-value using the Bellman equation. After training, it stops exploring and chooses the legal move with the highest Q-value. I compare it with random, tactical, and minimax opponents, and I show the learned values and decisions in an offline Python notebook.”
+
+The complete flow is:
+
+```text
+Board state → legal empty squares → ε-greedy AI action → opponent reply
+           → reward and next AI state → Q-value update → repeat until game ends
+```
+
+### Q-table basics
+
+Think of a Q-table as a lookup table with **one row per board state** and **one column per possible square**. `Q(s, a)` estimates how useful action `a` is when the agent sees state `s`. A high value is preferred, but **a Q-value is expected discounted reward, not a win probability**. The table is learned from repeated play; it is not filled with hand-written Tic-Tac-Toe rules.
+
+The board uses row-major indices:
+
+```text
+Index:     0 | 1 | 2       Displayed plot labels: 1 | 2 | 3
+           3 | 4 | 5                              4 | 5 | 6
+           6 | 7 | 8                              7 | 8 | 9
+```
+
+The state string uses `0 = empty`, `1 = AI`, and `2 = opponent`. For example, if the human plays X in the top-left and the AI is O, the AI sees `200000000`. Its row has nine possible columns, but square `0` is occupied, so only squares `1` through `8` are considered. In a final trained run, the center (`action 4`, or square 5 on the plot) is the best reply with a Q-value around `+0.404` for this opening. Values can vary during training; read the current notebook output for the exact value.
+
+| Item | Meaning |
+|---|---|
+| `Q(s, a)` | Estimated discounted return if the AI takes legal action `a` in state `s` and then follows its learned policy. |
+| Unseen state/action | Starts at `0.0`; its estimate changes when training visits it. |
+| Occupied square | Illegal action; shown as occupied in the UI and excluded from selection and the Bellman maximum. |
+| Highest legal Q-value | Greedy action used after training; ties are broken randomly. |
+| Canonical state | Rotated/reflected boards share one stored Q-table row, reducing duplicate learning. The displayed values are mapped back to the original board coordinates. |
+
+The Q-learning update in [`QLearningAgent.update`](tictactoe/agent.py) is:
+
+```text
+target = reward + γ × max Q(next_state, legal_next_action)  # nonterminal
+target = reward                                            # terminal
+Q(state, action) ← Q(state, action) + α × (target − Q(state, action))
+```
+
+Here `α = 0.15` controls how far the old value moves toward the target, and `γ = 0.97` controls how much future reward matters. For a simple terminal example, if an action's old Q-value is `0.20` and it wins immediately, the target is `+1`; the new value is `0.20 + 0.15 × (1 − 0.20) = 0.32`. For a nonterminal move, the agent also considers the best legal Q-value at its **next turn after the opponent replies**. This makes the state transition match the turn-by-turn game.
+
+### Code walkthrough from start to finish
+
+1. [`tictactoe/core.py`](tictactoe/core.py) defines the board as a nine-element tuple, checks wins and draws, rejects illegal moves, encodes a state from the AI's point of view, and provides random, tactical, and minimax training opponents. `canonicalize` maps the eight rotations/reflections of a board to one shared table key.
+2. [`tictactoe/agent.py`](tictactoe/agent.py) owns `self.q`, a dictionary from canonical state strings to nine Q-values. `values` maps stored values back to visible square positions. `select_action` uses ε-greedy selection during training and ignores occupied squares. `update` applies the equation above to the action just taken.
+3. The [one-cell notebook](notebooks/TicTacToe_All_In_One.ipynb) trains for `EPISODES = 160_000`, alternating whether the AI plays X or O. For each AI move it encodes the current board, selects a move, lets the opponent reply if the game continues, calculates the reward, and updates Q. Training opponents are chosen per opponent turn: 25% random, 15% tactical, and 60% minimax.
+4. Exploration starts at `ε = 1.0`, falls linearly to `0.03` over 85% of training, and stays at `0.03`. This is one **global schedule** for all starting squares. It lets the AI try unfamiliar moves early and favor learned moves later.
+5. Every 1,000 training games, the notebook records reward, wins/draws/losses, steps, TD error, and Q-tables for **all nine human openings**. Every 10,000 games, it separately tests 100 greedy games for each opening against random human follow-up moves. These evaluation games do **not** update the Q-table.
+6. After training, the notebook tests the greedy agent against random, tactical, and minimax opponents and runs 1,000 games for each human opening. It displays learning curves, opening comparisons, and action-value graphs.
+7. In the playable [`NotebookTicTacToe` class](scripts/build_one_cell_notebook.py), the human clicks a square; the trained agent reads that board's Q-values, chooses a legal maximal-Q square with `ε = 0`, and updates the board. The 3×3 value panel and bar chart explain that exact decision. The widget source is generated into the one-cell notebook by [`scripts/build_one_cell_notebook.py`](scripts/build_one_cell_notebook.py).
+
+The reward is `+1` for an AI win, `+0.3` for a draw, `−1` for an AI loss, and `0` before the game ends. A draw has a positive reward because drawing a perfect opponent is preferable to losing. The opponent policy is **part of training/evaluation**, while the deployed agent's move comes from its learned Q-table.
+
+### How to explain the graphs
+
+| Graph | What to tell faculty |
+|---|---|
+| Reward vs episode | Mean terminal reward in each 1,000-game training window; rising values show better outcomes as exploration falls. |
+| Success rate vs episode | Fraction of training games with a win or draw. These games still include exploration, so this is different from final greedy evaluation. |
+| Steps per episode | Board moves by both players and decisions by the AI. More moves can mean the AI survives to a draw rather than losing early. |
+| TD error vs episode | Mean absolute gap between the Q-learning target and the previous Q-value. Smaller updates suggest the estimates are settling; they do not prove convergence. |
+| Epsilon vs episode | The predetermined exploration schedule. It is identical for every starting square and is **not** a position-performance plot. |
+| Opening-specific win-rate curves | Nine separate greedy evaluations over training. These show the actual effect of the human's first square on AI performance. |
+| Opening Q-value curves and action bars | Show how the best estimated reply changes and which legal square the AI chooses for each opening. Green is the chosen action. |
+
+**Likely viva questions:** “Why Q-learning?” Tic-Tac-Toe has a small, discrete state/action space, making the table easy to inspect. “Why ε-greedy?” Exploration prevents the agent from only repeating its first promising move. “Why does minimax appear?” It is a strong training opponent and benchmark, not the algorithm used by the playable AI. “Does a higher Q mean a higher win percentage?” No; it estimates discounted reward under the training process. “Did it converge?” The curves stabilize empirically in this finite run, but a constant learning rate and exploration floor do not justify a mathematical convergence claim.
+
 ## Play in Python
 
-Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and records a 3×3 Q-table **for each of the nine human opening squares every 1,000 games**. The checkpoint tables are grouped by opening in tabs. After training, the plots appear before the game: reward, success rate, and steps versus episode; outcomes and best Q-value by human opening; the best Q-value's training progress for all nine openings; and nine AI-decision bar charts, one per opening. Expand the panels for the full training table and Q-table snapshots. The notebook also evaluates against random, tactical, and minimax opponents, then runs **1,000 games for each of the nine human first squares** against random X replies. These 9,000 games evaluate the trained, greedy policy; they do not update it. The playable 3×3 board sits beside its decision Q-values and an updating bar chart of all nine actions. Green marks the chosen action, blue marks other legal actions, and gray marks occupied squares. Choose X or O and use **New game** to reset. The notebook uses Python and `ipywidgets` for the game; a small inline style keeps button text black in dark notebook themes.
+Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and records a 3×3 Q-table **for each of the nine human opening squares every 1,000 games**. The checkpoint tables are grouped by opening in tabs. After training, the plots appear before the game: reward, success rate, and steps versus episode; outcomes and best Q-value by human opening; the best Q-value's training progress and win-rate progress for all nine openings; and nine AI-decision bar charts, one per opening. Expand the panels for the full training table and Q-table snapshots. The notebook also evaluates against random, tactical, and minimax opponents, then runs **1,000 games for each of the nine human first squares** against random X replies. These 9,000 games evaluate the trained, greedy policy; they do not update it. The playable 3×3 board sits beside its decision Q-values and an updating bar chart of all nine actions. Green marks the chosen action, blue marks other legal actions, and gray marks occupied squares. Choose X or O and use **New game** to reset. The notebook uses Python and `ipywidgets` for the game; a small inline style keeps button text black in dark notebook themes.
 
 Open the plots directly: [training curves](artifacts/plots/notebook_training_plots.png), [results by human opening](artifacts/plots/notebook_opening_graphs.png), [Q-value progress for all openings](artifacts/plots/notebook_opening_q_progress.png), and [AI decisions for all openings](artifacts/plots/notebook_ai_decisions_all_openings.png). The decision chart in the running notebook updates after every AI move.
 
@@ -101,7 +170,7 @@ For a short demonstration, reduce `--episodes`. A shorter run can produce differ
 
 The [one-cell Python notebook](notebooks/TicTacToe_All_In_One.ipynb) is the simplest way to train, examine the learning results, and play. It includes saved training tables and plots for the lab writeup. Its game Q-value panel updates with the agent's latest decision.
 
-The earlier run's full Q-table history remains available as [1,600 snapshots every 100 games](artifacts/q_table_every_100.jsonl.gz) and a [checkpoint CSV](artifacts/q_table_index_every_100.csv). These are separate research artifacts; the playable notebook shows only the Q-values relevant to each current decision.
+The earlier run's full Q-table history remains available as [1,600 snapshots every 100 games](artifacts/q_table_every_100.jsonl.gz) and a [checkpoint CSV](artifacts/q_table_index_every_100.csv). These are separate research artifacts. The playable notebook includes opening-state snapshots every 1,000 games and shows the Q-values relevant to each live decision.
 
 [Open the one-cell notebook in Colab](https://colab.research.google.com/github/shreejaykurhade/tic-tac-toe-qlearning-lab/blob/main/notebooks/TicTacToe_All_In_One.ipynb)
 
