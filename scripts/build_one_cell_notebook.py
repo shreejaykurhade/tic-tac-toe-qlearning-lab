@@ -17,8 +17,7 @@ def module_source(filename: str) -> str:
 
 
 DEMO = '''
-# Train with the same reward, exploration schedule, and opponent mixture as
-# the report. Change EPISODES for a faster demonstration.
+# Train: try moves early, then favor learned moves.
 import ipywidgets as widgets
 from IPython.display import display
 
@@ -33,6 +32,7 @@ for episode in range(1, EPISODES + 1):
     board = EMPTY_BOARD
     if agent_mark == O:
         board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
+    # Epsilon falls from 1.0 to 0.03.
     fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
     epsilon = 1.0 + fraction * (0.03 - 1.0)
     while True:
@@ -45,6 +45,7 @@ for episode in range(1, EPISODES + 1):
             board = play(board, reply, opponent_mark)
         done = terminal(board)
         result = winner(board)
+        # Reward: win +1, draw +0.3, loss -1.
         reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
         agent.update(state, action, reward,
                      None if done else encode_state(board, agent_mark), done)
@@ -154,6 +155,7 @@ class NotebookTicTacToe:
             self._agent_move()
 
     def _agent_move(self):
+        # Show Q-values before the AI places its mark.
         before = self.board
         state = encode_state(before, self.agent_mark)
         values = self.agent.values(state)
@@ -191,12 +193,13 @@ def build():
         cells=[
             nbf.v4.new_markdown_cell(
                 "# Tic-Tac-Toe Q-learning — Python board\n\n"
-                "Run the **one code cell** below. The board appears on the left, and "
-                "the Q-values considered by the agent appear on the right after each AI move. "
-                "Choose X or O, then use **New game** to restart.\n\n"
-                "Edit `EPISODES` in the training section for a shorter run. "
-                "The default 160,000 games matches the project configuration. "
-                "Requires Python 3.10+ and `ipywidgets` in Jupyter."
+                "Run the code cell. Play on the left; see the AI's Q-values on the right. "
+                "Choose X or O, or press **New game**.\n\n"
+                "To explain it: **state** = board from the AI's view (0 empty, 1 AI, 2 you); "
+                "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
+                "**Q-learning** updates move values after each game turn.\n\n"
+                "Default: 160,000 training games. Edit `EPISODES` for a shorter run. "
+                "Requires Python 3.10+, Jupyter, and `ipywidgets`."
             ),
             nbf.v4.new_code_cell(code),
         ],

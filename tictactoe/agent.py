@@ -1,4 +1,4 @@
-"""Genuine off-policy tabular Q-learning, with rotation/reflection sharing."""
+"""Tabular Q-learning with board symmetry sharing."""
 
 import json
 from pathlib import Path
@@ -39,12 +39,7 @@ class QLearningAgent:
 
     def update(self, state: str, action: int, reward: float,
                next_state: str | None, done: bool) -> float:
-        """Q <- Q + alpha * [r + gamma * max_legal Q(next) - Q].
-
-        A transition contains an agent move plus an opponent reply, so the next
-        nonterminal state is always the SAME agent's next decision. Terminal
-        transitions never bootstrap. Returns the absolute temporal-difference error.
-        """
+        """Move Q toward reward plus the best legal next value."""
         if state[action] != "0":
             raise ValueError("Cannot learn an illegal action.")
         key, permutation = canonicalize(state)

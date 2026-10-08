@@ -1,8 +1,4 @@
-"""Tic-Tac-Toe rules, stationary opponents, and symmetry transforms.
-
-Board cells: 0 = empty, 1 = X, 2 = O. Actions are row-major indices 0..8.
-Only training/evaluation opponents use minimax; the learned agent never does.
-"""
+"""Game rules and opponents. Cells: 0 empty, 1 X, 2 O."""
 
 from functools import lru_cache
 import random
@@ -15,7 +11,7 @@ WIN_LINES = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (
 
 
 def legal_actions(board: Board) -> list[int]:
-    """Return empty squares, or no actions when the game has ended."""
+    """Return legal empty squares."""
     return [] if winner(board) else [i for i, mark in enumerate(board) if mark == 0]
 
 
@@ -42,7 +38,7 @@ def play(board: Board, action: int, mark: int) -> Board:
 
 
 def encode_state(board: Board, agent_mark: int) -> str:
-    """Encode board relative to the agent: 0 empty / 1 self / 2 opponent."""
+    """Encode 0 empty, 1 agent, 2 opponent."""
     return "".join("0" if m == 0 else "1" if m == agent_mark else "2" for m in board)
 
 
@@ -51,7 +47,7 @@ def other(mark: int) -> int:
 
 
 def _symmetries() -> tuple[tuple[int, ...], ...]:
-    # Each permutation maps an original action to its transformed action.
+    # Rotate/reflect cell indices.
     result = []
     for reflection in (False, True):
         for rotations in range(4):
@@ -79,13 +75,13 @@ def transform_state(state: str, permutation: tuple[int, ...]) -> str:
 
 @lru_cache(maxsize=None)
 def canonicalize(state: str) -> tuple[str, tuple[int, ...]]:
-    """Lexicographically smallest rotation/reflection and original->canonical map."""
+    """Use one key for symmetric boards."""
     return min(((transform_state(state, p), p) for p in SYMMETRIES), key=lambda pair: pair[0])
 
 
 @lru_cache(maxsize=None)
 def minimax_value(board: Board, to_move: int) -> int:
-    """Outcome under perfect play, relative to the player who moves next."""
+    """Score perfect play for the current player."""
     won = winner(board)
     if won:
         return 1 if won == to_move else -1
@@ -114,7 +110,7 @@ def minimax_action(board: Board, mark: int, rng: random.Random) -> int:
 
 
 def tactical_action(board: Board, mark: int, rng: random.Random) -> int:
-    """Win, block, take center, take a corner, otherwise take an edge."""
+    """Win, block, then prefer center or corners."""
     actions = legal_actions(board)
     for target in (mark, other(mark)):
         winning = [a for a in actions if winner(play(board, a, target)) == target]
@@ -131,6 +127,6 @@ OPPONENTS = {"random": random_action, "tactical": tactical_action, "minimax": mi
 
 def mixture_action(board: Board, mark: int, rng: random.Random,
                    weights: tuple[float, float, float]) -> int:
-    """Choose an opponent policy independently on every move (stationary mixture)."""
+    """Choose a training opponent each turn."""
     name = rng.choices(tuple(OPPONENTS), weights=weights, k=1)[0]
     return OPPONENTS[name](board, mark, rng)
