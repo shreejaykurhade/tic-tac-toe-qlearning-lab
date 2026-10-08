@@ -19,8 +19,15 @@ def module_source(filename: str) -> str:
 DEMO = '''
 # Train: try moves early, then favor learned moves.
 import ipywidgets as widgets
-from IPython.display import display
+from IPython.display import Image, display
 import matplotlib.pyplot as plt
+from io import BytesIO
+
+def figure_png(fig):
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=120, facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    return buffer.getvalue()
 
 EPISODES = 160_000
 SEED = 42
@@ -28,22 +35,26 @@ agent = QLearningAgent(alpha=0.15, gamma=0.97, seed=SEED)
 opponent_rng = random.Random(SEED + 1)
 opponent_weights = (0.25, 0.15, 0.60)  # random, tactical, minimax
 history = []
+start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
+               "Right", "Bottom-left", "Bottom", "Bottom-right")
+opening_q_history = []
 window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
-q_log = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
+q_logs = [widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
+          for _ in range(9)]
 training_table = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
 opening_q_log = widgets.Output(layout=widgets.Layout(max_height="320px", overflow="auto"))
 
-def print_q_snapshot(episode):
-    # Keep the same human opening so checkpoints are comparable.
-    board = play(EMPTY_BOARD, 0, X)
+def q_snapshot(episode, start, name):
+    board = play(EMPTY_BOARD, start, X)
     values = agent.values(encode_state(board, O))
     best = agent.greedy_actions(board, O)
-    print(f"Episode {episode:,} | human X at top-left, AI O to move | states: {len(agent.q)}")
+    lines = [f"Episode {episode:,} | human X at {name}, AI O to move | states: {len(agent.q)}"]
     for row in range(0, 9, 3):
-        print("  " + " | ".join("   X   " if board[i] else f"{values[i]:+.3f}"
-                               for i in range(row, row + 3)))
-    print("  Best AI reply:", ", ".join(f"({i // 3 + 1},{i % 3 + 1})" for i in best),
-          f"| Q = {values[best[0]]:+.3f}")
+        lines.append("  " + " | ".join("   X   " if board[i] else f"{values[i]:+.3f}"
+                                      for i in range(row, row + 3)))
+    replies = ", ".join(f"({i // 3 + 1},{i % 3 + 1})" for i in best)
+    lines.append(f"  Best AI reply: {replies} | Q = {values[best[0]]:+.3f}\\n")
+    return "\\n".join(lines), values[best[0]]
 
 for episode in range(1, EPISODES + 1):
     agent_mark = X if episode % 2 else O
@@ -87,17 +98,21 @@ for episode in range(1, EPISODES + 1):
                         "avg_moves": window["moves"] / count,
                         "wins": window["wins"], "draws": window["draws"],
                         "losses": window["losses"]})
-        with q_log:
-            print_q_snapshot(episode)
+        best_values = []
+        for start, name in enumerate(start_names):
+            snapshot, best_q = q_snapshot(episode, start, name)
+            q_logs[start].append_stdout(snapshot)
+            best_values.append(best_q)
+        opening_q_history.append({"episode": episode, "best_values": best_values})
         window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
 
-with training_table:
-    print("Training results by 1,000-game window")
-    print(f"{'Episode':>8} {'eps':>6} {'W':>5} {'D':>5} {'L':>5} {'avg reward':>11} {'non-loss':>9} {'moves':>7}")
-    for row in history:
-        print(f"{row['episode']:8,d} {row['epsilon']:6.3f} {row['wins']:5d} "
-              f"{row['draws']:5d} {row['losses']:5d} {row['avg_reward']:11.3f} "
-              f"{row['non_loss']:9.1%} {row['avg_moves']:7.2f}")
+table_lines = ["Training results by 1,000-game window",
+               f"{'Episode':>8} {'eps':>6} {'W':>5} {'D':>5} {'L':>5} {'avg reward':>11} {'non-loss':>9} {'moves':>7}"]
+for row in history:
+    table_lines.append(f"{row['episode']:8,d} {row['epsilon']:6.3f} {row['wins']:5d} "
+                       f"{row['draws']:5d} {row['losses']:5d} {row['avg_reward']:11.3f} "
+                       f"{row['non_loss']:9.1%} {row['avg_moves']:7.2f}")
+training_table.append_stdout("\\n".join(table_lines) + "\\n")
 print(f"Training complete: {EPISODES:,} games; final 1,000-game window: "
       f"{history[-1]['non_loss']:.1%} non-loss, {history[-1]['avg_reward']:+.3f} mean reward.")
 
@@ -124,8 +139,6 @@ for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
 
 # Compare all nine human openings with the same trained AI.
 OPENING_GAMES = 1000
-start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
-               "Right", "Bottom-left", "Bottom", "Bottom-right")
 opening_results = []
 print("\\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
 print("Q is learned future return, not a win probability. X marks the occupied cell.")
@@ -149,13 +162,13 @@ for start, name in enumerate(start_names):
     opening_results.append({"start": name, "best_reply": best[0],
                             "best_q": q_values[best[0]], "wins": wins,
                             "draws": draws, "losses": losses})
-    with opening_q_log:
-        print(f"\\n{name}: human X at ({start // 3 + 1},{start % 3 + 1})")
-        for row in range(0, 9, 3):
-            print("  " + " | ".join("   X   " if first_board[i] else f"{q_values[i]:+.3f}"
-                                   for i in range(row, row + 3)))
-        print(f"  Best AI reply: ({best[0] // 3 + 1},{best[0] % 3 + 1}), "
-              f"Q = {q_values[best[0]]:+.3f}; outcomes: {wins} W / {draws} D / {losses} L")
+    q_lines = [f"\\n{name}: human X at ({start // 3 + 1},{start % 3 + 1})"]
+    for row in range(0, 9, 3):
+        q_lines.append("  " + " | ".join("   X   " if first_board[i] else f"{q_values[i]:+.3f}"
+                                           for i in range(row, row + 3)))
+    q_lines.append(f"  Best AI reply: ({best[0] // 3 + 1},{best[0] % 3 + 1}), "
+                   f"Q = {q_values[best[0]]:+.3f}; outcomes: {wins} W / {draws} D / {losses} L\\n")
+    opening_q_log.append_stdout("\\n".join(q_lines))
 
 print("\\nResults by human opening (AI perspective; 1,000 games per row)")
 print(f"{'Opening':<13} {'AI reply':>8} {'Best Q':>8} {'Wins':>6} {'Draws':>6} "
@@ -180,7 +193,7 @@ for ax, key, title, ylabel, color in zip(
     ax.grid(alpha=0.25)
 axes[1].set_ylim(0, 1.05)
 print("\\nTRAINING PLOTS: reward, success rate, and steps versus episode")
-plt.show()
+display(Image(data=figure_png(fig)))
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), constrained_layout=True)
 positions = list(range(9))
@@ -199,18 +212,36 @@ for ax in axes:
     ax.set_xticks(positions, start_names, rotation=45, ha="right")
     ax.grid(axis="y", alpha=0.2)
 print("\\nOPENING GRAPHS: outcomes and best AI Q-value by human first square")
-plt.show()
+display(Image(data=figure_png(fig)))
 
-details = widgets.Accordion(children=[training_table, q_log, opening_q_log], selected_index=None)
+fig, axes = plt.subplots(3, 3, figsize=(12, 8), sharex=True, sharey=True,
+                         constrained_layout=True)
+for start, ax in enumerate(axes.flat):
+    color = "#2563eb" if start in (0, 2, 6, 8) else "#d97706" if start != 4 else "#059669"
+    ax.plot([row["episode"] for row in opening_q_history],
+            [row["best_values"][start] for row in opening_q_history],
+            color=color, linewidth=1.7)
+    ax.set_title(start_names[start])
+    ax.grid(alpha=0.2)
+    if start >= 6:
+        ax.set_xlabel("Training episode")
+    if start % 3 == 0:
+        ax.set_ylabel("Best legal Q")
+fig.suptitle("Best AI reply Q-value during training, by human opening")
+print("\\nQ-VALUE PROGRESS: all nine human starting squares, measured every 1,000 games")
+display(Image(data=figure_png(fig)))
+
+q_tabs = widgets.Tab(children=q_logs)
+for start, name in enumerate(start_names):
+    q_tabs.set_title(start, name)
+details = widgets.Accordion(children=[training_table, q_tabs, opening_q_log], selected_index=None)
 for index, title in enumerate(("Full training table", "Q-table every 1,000 games",
                                "Q-tables for each human opening")):
     details.set_title(index, title)
 display(details)
 
-def decision_figure(board, values, selected):
+def draw_decision_bars(ax, board, values, selected):
     # One bar per square; occupied squares have no legal Q-value.
-    fig, ax = plt.subplots(figsize=(3.25, 2.35), dpi=110)
-    fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
     colors = ["#cbd5e1" if board[i] else "#16a34a" if i == selected else "#2563eb"
               for i in range(9)]
@@ -224,16 +255,29 @@ def decision_figure(board, values, selected):
     ax.xaxis.label.set_color("black")
     ax.yaxis.label.set_color("black")
     ax.grid(axis="y", alpha=0.2)
+    return ax
+
+def decision_figure(board, values, selected):
+    fig, ax = plt.subplots(figsize=(3.25, 2.35), dpi=110)
+    fig.patch.set_facecolor("white")
+    draw_decision_bars(ax, board, values, selected)
     fig.tight_layout()
     return fig
 
-example_board = play(EMPTY_BOARD, 0, X)
-example_values = agent.values(encode_state(example_board, O))
-print("\\nEXAMPLE AI DECISION GRAPH: human X at top-left, AI O to move")
-example_fig = decision_figure(example_board, example_values,
-                              agent.greedy_actions(example_board, O)[0])
-display(example_fig)
-plt.close(example_fig)
+fig, axes = plt.subplots(3, 3, figsize=(12, 9), sharey=True, constrained_layout=True)
+for start, ax in enumerate(axes.flat):
+    board = play(EMPTY_BOARD, start, X)
+    values = agent.values(encode_state(board, O))
+    selected = agent.greedy_actions(board, O)[0]
+    draw_decision_bars(ax, board, values, selected)
+    ax.set_title(f"{start_names[start]}: AI picks {selected + 1}")
+    if start < 6:
+        ax.set_xlabel("")
+    if start % 3:
+        ax.set_ylabel("")
+fig.suptitle("AI first decision for each human opening (green = chosen)")
+print("\\nAI DECISION GRAPHS: all nine human starting squares")
+display(Image(data=figure_png(fig)))
 
 
 class NotebookTicTacToe:
@@ -267,7 +311,8 @@ class NotebookTicTacToe:
         self.q_title = widgets.Label(value="Q-values at the AI's decision")
         self.q_state = widgets.Label(value="Make a move to see the Q-table.")
         self.q_choice = widgets.Label(value="0 = empty · 1 = AI · 2 = you")
-        self.decision_chart = widgets.Output(layout=widgets.Layout(width="330px", height="260px"))
+        self.decision_chart = widgets.Image(format="png",
+                                            layout=widgets.Layout(width="330px"))
         self.q_cells = [widgets.Button(
             description="—", layout=widgets.Layout(width="92px", height="52px"),
         ) for _ in range(9)]
@@ -342,7 +387,7 @@ class NotebookTicTacToe:
         self._draw_side()
         self.q_state.value = "Make a move to see the Q-table."
         self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
-        self.decision_chart.clear_output(wait=True)
+        self.decision_chart.value = b""
         for button in self.q_cells:
             button.description = "—"
             button.style.button_color = "#f8fafc"
@@ -379,11 +424,8 @@ class NotebookTicTacToe:
         self.q_choice.value = (
             f"AI chose row {row + 1}, column {col + 1} · Q = {values[selected]:+.3f}"
         )
-        with self.decision_chart:
-            self.decision_chart.clear_output(wait=True)
-            fig = decision_figure(before, values, selected)
-            display(fig)
-            plt.close(fig)
+        fig = decision_figure(before, values, selected)
+        self.decision_chart.value = figure_png(fig)
         self.board = play(before, selected, self.agent_mark)
         self._finish_or_continue()
 
@@ -412,12 +454,13 @@ def build():
                 "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
                 "**Q-learning** updates move values after each game turn.\n\n"
                 "Default: 160,000 training games. The cell prints an opening-state "
-                "Q-table for the top-left human opening every 1,000 games, then a training "
+                "Q-table for each human opening every 1,000 games, then a training "
                 "table, opponent evaluation, and reward, success-rate, and steps plots. "
                 "It also evaluates 1,000 games for each of the nine human opening squares, "
                 "with a Q-table, results table, and comparison graph for those openings. "
-                "The three plots appear above the game; expand the panels for full tables "
-                "and Q-table snapshots. Each AI move also updates a Q-value bar chart. "
+                "The plots include Q-value progress and AI decisions for all nine openings. "
+                "Expand the panels for full tables and Q-table snapshots, grouped by opening. "
+                "Each AI move also updates a Q-value bar chart. "
                 "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "
                 "Requires Python 3.10+, Jupyter, `ipywidgets`, and Matplotlib."
             ),
