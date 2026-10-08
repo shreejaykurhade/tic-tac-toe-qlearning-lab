@@ -38,6 +38,7 @@ history = []
 start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
                "Right", "Bottom-left", "Bottom", "Bottom-right")
 opening_q_history = []
+opening_performance = []
 window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0,
           "moves": 0, "decisions": 0, "td_error": 0.0}
 total_reward = 0.0
@@ -57,6 +58,23 @@ def q_snapshot(episode, start, name):
     replies = ", ".join(f"({i // 3 + 1},{i % 3 + 1})" for i in best)
     lines.append(f"  Best AI reply: {replies} | Q = {values[best[0]]:+.3f}\\n")
     return "\\n".join(lines), values[best[0]]
+
+def opening_checkpoint(episode, games=100):
+    # Evaluate the greedy AI from each fixed human first move.
+    rates = []
+    for start in range(9):
+        rng = random.Random(SEED + 5000 + start)
+        wins = 0
+        for _ in range(games):
+            board = play(EMPTY_BOARD, start, X)
+            while not terminal(board):
+                turn = X if sum(cell != 0 for cell in board) % 2 == 0 else O
+                action = (agent.select_action(board, O, rng=rng) if turn == O
+                          else mixture_action(board, X, rng, (1, 0, 0)))
+                board = play(board, action, turn)
+            wins += winner(board) == O
+        rates.append(wins / games)
+    opening_performance.append({"episode": episode, "win_rates": rates})
 
 for episode in range(1, EPISODES + 1):
     agent_mark = X if episode % 2 else O
@@ -115,6 +133,8 @@ for episode in range(1, EPISODES + 1):
             q_logs[start].append_stdout(snapshot)
             best_values.append(best_q)
         opening_q_history.append({"episode": episode, "best_values": best_values})
+        if episode % 10_000 == 0 or episode == EPISODES:
+            opening_checkpoint(episode)
         window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0,
                   "moves": 0, "decisions": 0, "td_error": 0.0}
 
@@ -215,7 +235,8 @@ learning_curve("Steps per episode vs episode", "Mean moves per game",
                 ("AI decisions", [r["avg_decisions"] for r in history], "#7c3aed")])
 learning_curve("TD error vs episode", "Mean absolute TD error / update",
                [("Learning error", [r["mean_abs_td_error"] for r in history], "#dc2626")])
-learning_curve("Exploration rate vs episode", "Epsilon",
+print("Epsilon is one global training schedule; it does not depend on the opening square.")
+learning_curve("Global exploration schedule (all openings)", "Epsilon",
                [("Exploration", [r["epsilon"] for r in history], "#0891b2")], (0, 1.05))
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
@@ -267,6 +288,23 @@ for start, ax in enumerate(axes.flat):
         ax.set_ylabel("Best legal Q")
 fig.suptitle("Best AI reply Q-value during training, by human opening")
 print("\\nQ-VALUE PROGRESS: all nine human starting squares, measured every 1,000 games")
+display(Image(data=figure_png(fig)))
+
+fig, axes = plt.subplots(3, 3, figsize=(12, 8), sharex=True, sharey=True,
+                         constrained_layout=True)
+for start, ax in enumerate(axes.flat):
+    ax.plot([row["episode"] for row in opening_performance],
+            [row["win_rates"][start] for row in opening_performance],
+            color="#059669", marker="o", markersize=3, linewidth=1.7)
+    ax.set_title(start_names[start])
+    ax.set_ylim(0, 1.05)
+    ax.grid(alpha=0.2)
+    if start >= 6:
+        ax.set_xlabel("Training episode")
+    if start % 3 == 0:
+        ax.set_ylabel("AI win rate")
+fig.suptitle("AI win rate by human first square: 100 greedy games per checkpoint")
+print("\\nOPENING LEARNING CURVES: AI win rate for each human start, evaluated every 10,000 games")
 display(Image(data=figure_png(fig)))
 
 q_tabs = widgets.Tab(children=q_logs)
@@ -497,7 +535,8 @@ def build():
                 "It also evaluates 1,000 games for each of the nine human opening squares, "
                 "with a Q-table, results table, and comparison graph for those openings. "
                 "The plots include five standard RL curves (reward, success, steps, "
-                "TD error, exploration), plus Q-value progress and AI decisions for all nine openings. "
+                "TD error, global exploration), plus Q-value and win-rate progress "
+                "and AI decisions for all nine openings. "
                 "Expand the panels for full tables and Q-table snapshots, grouped by opening. "
                 "Each AI move also updates a Q-value bar chart. "
                 "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "

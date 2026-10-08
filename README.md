@@ -12,6 +12,8 @@ Open the plots directly: [training curves](artifacts/plots/notebook_training_plo
 
 The notebook also displays five separate standard RL graphs before the existing diagrams: **reward vs episode**, **success rate vs episode**, **steps per episode**, **mean absolute TD error vs episode**, and **exploration rate (epsilon) vs episode**. Each uses non-overlapping 1,000-game training windows. Reward and success are exploratory training outcomes; TD error measures the size of Q-learning updates, not prediction accuracy.
 
+Epsilon is a **global training setting**, so its schedule is the same for every starting square. To show how the starting square affects learning, the notebook separately evaluates the greedy AI every 10,000 training games: 100 games for each of the nine human openings against random follow-up moves. The resulting [opening-specific win-rate curves](artifacts/plots/notebook_opening_win_rate_progress.png) plot performance by starting square. The existing Q-value progress and AI-decision diagrams remain included.
+
 Direct PNGs: [reward](artifacts/plots/notebook_reward_vs_episode.png), [success rate](artifacts/plots/notebook_success_vs_episode.png), [steps](artifacts/plots/notebook_steps_vs_episode.png), [TD error](artifacts/plots/notebook_td_error_vs_episode.png), and [epsilon](artifacts/plots/notebook_epsilon_vs_episode.png).
 
 ```bash
