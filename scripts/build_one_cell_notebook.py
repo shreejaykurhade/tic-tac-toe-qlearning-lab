@@ -388,7 +388,7 @@ class NotebookTicTacToe:
         self.q_state = widgets.Label(value="Make a move to see the Q-table.")
         self.q_choice = widgets.Label(value="0 = empty · 1 = AI · 2 = you")
         self.decision_chart = widgets.Image(format="png",
-                                            layout=widgets.Layout(width="330px"))
+                                            layout=widgets.Layout(width="330px", display="none"))
         self.q_cells = [widgets.Button(
             description="—", layout=widgets.Layout(width="92px", height="52px"),
         ) for _ in range(9)]
@@ -464,6 +464,7 @@ class NotebookTicTacToe:
         self.q_state.value = "Make a move to see the Q-table."
         self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
         self.decision_chart.value = b""
+        self.decision_chart.layout.display = "none"
         for button in self.q_cells:
             button.description = "—"
             button.style.button_color = "#f8fafc"
@@ -502,6 +503,7 @@ class NotebookTicTacToe:
         )
         fig = decision_figure(before, values, selected)
         self.decision_chart.value = figure_png(fig)
+        self.decision_chart.layout.display = "block"
         self.board = play(before, selected, self.agent_mark)
         self._finish_or_continue()
 
