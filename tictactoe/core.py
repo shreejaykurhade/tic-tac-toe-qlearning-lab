@@ -24,10 +24,12 @@ def winner(board: Board) -> int:
 
 
 def terminal(board: Board) -> bool:
+    """Stop after a win or a full board."""
     return bool(winner(board)) or 0 not in board
 
 
 def play(board: Board, action: int, mark: int) -> Board:
+    """Place a mark only in a valid empty square."""
     if len(board) != 9 or mark not in (X, O):
         raise ValueError("Expected a nine-cell board and mark X=1 or O=2.")
     if terminal(board):
@@ -44,6 +46,7 @@ def encode_state(board: Board, agent_mark: int) -> str:
 
 
 def other(mark: int) -> int:
+    """Switch between X=1 and O=2."""
     return 3 - mark
 
 
@@ -95,6 +98,7 @@ def minimax_value(board: Board, to_move: int) -> int:
 
 @lru_cache(maxsize=None)
 def minimax_actions(board: Board, mark: int) -> tuple[int, ...]:
+    """Find optimal replies for the training opponent."""
     actions = legal_actions(board)
     if not actions:
         return ()
@@ -129,6 +133,6 @@ OPPONENTS = {"random": random_action, "tactical": tactical_action, "minimax": mi
 
 def mixture_action(board: Board, mark: int, rng: random.Random,
                    weights: tuple[float, float, float]) -> int:
-    """Choose a training opponent each turn."""
+    """Sample random, tactical, or minimax for one opponent turn."""
     name = rng.choices(tuple(OPPONENTS), weights=weights, k=1)[0]
     return OPPONENTS[name](board, mark, rng)

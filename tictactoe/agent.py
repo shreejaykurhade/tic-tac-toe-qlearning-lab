@@ -16,7 +16,7 @@ class QLearningAgent:
         self.q: dict[str, list[float]] = {}
 
     def values(self, state: str) -> list[float]:
-        # Share learning across rotated/reflected boards.
+        # Share learning across rotations, then return visible board positions.
         key, permutation = canonicalize(state)
         values = self.q.get(key, [0.0] * 9)
         return [values[permutation[a]] for a in range(9)]
@@ -43,7 +43,7 @@ class QLearningAgent:
 
     def update(self, state: str, action: int, reward: float,
                next_state: str | None, done: bool) -> float:
-        """Move Q toward reward plus the best legal next value."""
+        """Update one state-action value after the opponent's reply."""
         if state[action] != "0":
             raise ValueError("Cannot learn an illegal action.")
         key, permutation = canonicalize(state)

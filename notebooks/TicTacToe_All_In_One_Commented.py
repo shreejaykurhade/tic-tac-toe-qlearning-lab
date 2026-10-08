@@ -1,23 +1,212 @@
-"""Build the self-contained Python widget notebook from the RL source."""
+# One Python cell: rules, Q-learning agent, training, results, and game.
+# Part 1: board rules and training opponents.
+"""Game rules and opponents. Cells: 0 empty, 1 X, 2 O."""
+
+from functools import lru_cache
+import random
+from typing import TypeAlias
+
+Board: TypeAlias = tuple[int, ...]
+X, O = 1, 2
+EMPTY_BOARD: Board = (0,) * 9
+WIN_LINES = ((0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6))
+
+
+def legal_actions(board: Board) -> list[int]:
+    """Return legal empty squares."""
+    return [] if winner(board) else [i for i, mark in enumerate(board) if mark == 0]
+
+
+@lru_cache(maxsize=None)
+def winner(board: Board) -> int:
+    for a, b, c in WIN_LINES:
+        if board[a] and board[a] == board[b] == board[c]:
+            return board[a]
+    return 0
+
+
+def terminal(board: Board) -> bool:
+    """Stop after a win or a full board."""
+    return bool(winner(board)) or 0 not in board
+
+
+def play(board: Board, action: int, mark: int) -> Board:
+    """Place a mark only in a valid empty square."""
+    if len(board) != 9 or mark not in (X, O):
+        raise ValueError("Expected a nine-cell board and mark X=1 or O=2.")
+    if terminal(board):
+        raise ValueError("Cannot play after a terminal state.")
+    if action not in range(9) or board[action] != 0:
+        raise ValueError("Action must select an empty cell in 0..8.")
+    return board[:action] + (mark,) + board[action + 1:]
+
+
+def encode_state(board: Board, agent_mark: int) -> str:
+    """Encode 0 empty, 1 agent, 2 opponent."""
+    # The same encoding works whether the agent plays X or O.
+    return "".join("0" if m == 0 else "1" if m == agent_mark else "2" for m in board)
+
+
+def other(mark: int) -> int:
+    """Switch between X=1 and O=2."""
+    return 3 - mark
+
+
+def _symmetries() -> tuple[tuple[int, ...], ...]:
+    # Rotate/reflect cell indices.
+    result = []
+    for reflection in (False, True):
+        for rotations in range(4):
+            permutation = []
+            for i in range(9):
+                r, c = divmod(i, 3)
+                if reflection:
+                    c = 2 - c
+                for _ in range(rotations):
+                    r, c = c, 2 - r
+                permutation.append(3 * r + c)
+            result.append(tuple(permutation))
+    return tuple(result)
+
+
+SYMMETRIES = _symmetries()
+
+
+def transform_state(state: str, permutation: tuple[int, ...]) -> str:
+    result = ["0"] * 9
+    for i, j in enumerate(permutation):
+        result[j] = state[i]
+    return "".join(result)
+
+
+@lru_cache(maxsize=None)
+def canonicalize(state: str) -> tuple[str, tuple[int, ...]]:
+    """Use one key for symmetric boards."""
+    # Return the smallest rotated/reflected state and its move mapping.
+    return min(((transform_state(state, p), p) for p in SYMMETRIES), key=lambda pair: pair[0])
+
+
+@lru_cache(maxsize=None)
+def minimax_value(board: Board, to_move: int) -> int:
+    """Score perfect play for the current player."""
+    won = winner(board)
+    if won:
+        return 1 if won == to_move else -1
+    actions = legal_actions(board)
+    if not actions:
+        return 0
+    return max(-minimax_value(play(board, a, to_move), other(to_move)) for a in actions)
+
+
+@lru_cache(maxsize=None)
+def minimax_actions(board: Board, mark: int) -> tuple[int, ...]:
+    """Find optimal replies for the training opponent."""
+    actions = legal_actions(board)
+    if not actions:
+        return ()
+    values = [-minimax_value(play(board, a, mark), other(mark)) for a in actions]
+    best = max(values)
+    return tuple(a for a, v in zip(actions, values) if v == best)
+
+
+def random_action(board: Board, mark: int, rng: random.Random) -> int:
+    return rng.choice(legal_actions(board))
+
+
+def minimax_action(board: Board, mark: int, rng: random.Random) -> int:
+    return rng.choice(minimax_actions(board, mark))
+
+
+def tactical_action(board: Board, mark: int, rng: random.Random) -> int:
+    """Win, block, then prefer center or corners."""
+    actions = legal_actions(board)
+    for target in (mark, other(mark)):
+        winning = [a for a in actions if winner(play(board, a, target)) == target]
+        if winning:
+            return rng.choice(winning)
+    if 4 in actions:
+        return 4
+    corners = [a for a in actions if a in (0, 2, 6, 8)]
+    return rng.choice(corners or actions)
+
+
+OPPONENTS = {"random": random_action, "tactical": tactical_action, "minimax": minimax_action}
+
+
+def mixture_action(board: Board, mark: int, rng: random.Random,
+                   weights: tuple[float, float, float]) -> int:
+    """Sample random, tactical, or minimax for one opponent turn."""
+    name = rng.choices(tuple(OPPONENTS), weights=weights, k=1)[0]
+    return OPPONENTS[name](board, mark, rng)
+
+# Part 2: Q-table, action selection, and learning update.
+"""Tabular Q-learning with board symmetry sharing."""
+
+import json
 from pathlib import Path
-import re
-
-import nbformat as nbf
-
-ROOT = Path(__file__).resolve().parents[1]
-DESTINATION = ROOT / "notebooks/TicTacToe_All_In_One.ipynb"
-COMMENTED_CODE = ROOT / "notebooks/TicTacToe_All_In_One_Commented.py"
+import random
 
 
-def module_source(filename: str) -> str:
-    source = (ROOT / "tictactoe" / filename).read_text(encoding="utf-8")
-    source = re.sub(r"(?m)^from \.core import [^\n]*\n", "", source)
-    if filename == "agent.py":
-        source = source.split("    def export(", 1)[0]
-    return source
+
+class QLearningAgent:
+    def __init__(self, alpha: float = 0.15, gamma: float = 0.97, seed: int = 42):
+        # Q-table: one state key maps to nine action values.
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rng = random.Random(seed)
+        self.q: dict[str, list[float]] = {}
+
+    def values(self, state: str) -> list[float]:
+        # Share learning across rotations, then return visible board positions.
+        key, permutation = canonicalize(state)
+        values = self.q.get(key, [0.0] * 9)
+        return [values[permutation[a]] for a in range(9)]
+
+    def greedy_actions(self, board: Board, mark: int) -> list[int]:
+        # Compare only empty squares; occupied moves are illegal.
+        actions = legal_actions(board)
+        if not actions:
+            return []
+        values = self.values(encode_state(board, mark))
+        maximum = max(values[a] for a in actions)
+        return [a for a in actions if abs(values[a] - maximum) <= 1e-12]
+
+    def select_action(self, board: Board, agent_mark: int, epsilon: float = 0.0,
+                      rng: random.Random | None = None) -> int:
+        rng = rng or self.rng
+        actions = legal_actions(board)
+        if not actions:
+            raise ValueError("No legal action in a terminal state.")
+        # Explore with probability epsilon; otherwise use the best Q-value.
+        if rng.random() < epsilon:
+            return rng.choice(actions)
+        return rng.choice(self.greedy_actions(board, agent_mark))
+
+    def update(self, state: str, action: int, reward: float,
+               next_state: str | None, done: bool) -> float:
+        """Update one state-action value after the opponent's reply."""
+        if state[action] != "0":
+            raise ValueError("Cannot learn an illegal action.")
+        key, permutation = canonicalize(state)
+        values = self.q.setdefault(key, [0.0] * 9)
+        canonical_action = permutation[action]
+        # Terminal target is the reward; otherwise add future value.
+        target = reward
+        if not done:
+            if next_state is None:
+                raise ValueError("A nonterminal update needs a next state.")
+            next_values = self.values(next_state)
+            actions = [a for a, cell in enumerate(next_state) if cell == "0"]
+            if not actions:
+                raise ValueError("A nonterminal next state needs a legal action.")
+            target += self.gamma * max(next_values[a] for a in actions)
+        td_error = target - values[canonical_action]
+        # Q <- Q + alpha * (target - Q).
+        values[canonical_action] += self.alpha * td_error
+        return abs(td_error)
 
 
-DEMO = '''
+
 # Part 3: train, evaluate, plot results, and play.
 import ipywidgets as widgets
 from IPython.display import Image, display
@@ -59,8 +248,8 @@ def q_snapshot(episode, start, name):
         lines.append("  " + " | ".join("   X   " if board[i] else f"{values[i]:+.3f}"
                                       for i in range(row, row + 3)))
     replies = ", ".join(f"({i // 3 + 1},{i % 3 + 1})" for i in best)
-    lines.append(f"  Best AI reply: {replies} | Q = {values[best[0]]:+.3f}\\n")
-    return "\\n".join(lines), values[best[0]]
+    lines.append(f"  Best AI reply: {replies} | Q = {values[best[0]]:+.3f}\n")
+    return "\n".join(lines), values[best[0]]
 
 def opening_checkpoint(episode, games=100):
     # Measure learning for each opening without changing Q-values.
@@ -151,12 +340,12 @@ for row in history:
     table_lines.append(f"{row['episode']:8,d} {row['epsilon']:6.3f} {row['wins']:5d} "
                        f"{row['draws']:5d} {row['losses']:5d} {row['avg_reward']:11.3f} "
                        f"{row['non_loss']:9.1%} {row['avg_moves']:7.2f}")
-training_table.append_stdout("\\n".join(table_lines) + "\\n")
+training_table.append_stdout("\n".join(table_lines) + "\n")
 print(f"Training complete: {EPISODES:,} games; final 1,000-game window: "
       f"{history[-1]['non_loss']:.1%} non-loss, {history[-1]['avg_reward']:+.3f} mean reward.")
 
 # Test the trained policy; these games do not update Q.
-print("\\nFinal evaluation (200 games as X and 200 as O per opponent)")
+print("\nFinal evaluation (200 games as X and 200 as O per opponent)")
 print(f"{'Opponent':<10} {'Wins':>5} {'Draws':>6} {'Losses':>7} {'Non-loss':>9}")
 for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
                       ("Minimax", (0, 0, 1))):
@@ -179,7 +368,7 @@ for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
 # Fix the first human square, then compare 1,000 games per square.
 OPENING_GAMES = 1000
 opening_results = []
-print("\\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
+print("\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
 print("Q is learned future return, not a win probability. X marks the occupied cell.")
 for start, name in enumerate(start_names):
     first_board = play(EMPTY_BOARD, start, X)
@@ -201,15 +390,15 @@ for start, name in enumerate(start_names):
     opening_results.append({"start": name, "best_reply": best[0],
                             "best_q": q_values[best[0]], "wins": wins,
                             "draws": draws, "losses": losses})
-    q_lines = [f"\\n{name}: human X at ({start // 3 + 1},{start % 3 + 1})"]
+    q_lines = [f"\n{name}: human X at ({start // 3 + 1},{start % 3 + 1})"]
     for row in range(0, 9, 3):
         q_lines.append("  " + " | ".join("   X   " if first_board[i] else f"{q_values[i]:+.3f}"
                                            for i in range(row, row + 3)))
     q_lines.append(f"  Best AI reply: ({best[0] // 3 + 1},{best[0] % 3 + 1}), "
-                   f"Q = {q_values[best[0]]:+.3f}; outcomes: {wins} W / {draws} D / {losses} L\\n")
-    opening_q_log.append_stdout("\\n".join(q_lines))
+                   f"Q = {q_values[best[0]]:+.3f}; outcomes: {wins} W / {draws} D / {losses} L\n")
+    opening_q_log.append_stdout("\n".join(q_lines))
 
-print("\\nResults by human opening (AI perspective; 1,000 games per row)")
+print("\nResults by human opening (AI perspective; 1,000 games per row)")
 print(f"{'Opening':<13} {'AI reply':>8} {'Best Q':>8} {'Wins':>6} {'Draws':>6} "
       f"{'Losses':>6} {'Win rate':>9}")
 for row in opening_results:
@@ -233,7 +422,7 @@ def learning_curve(title, ylabel, series, ylim=None):
         ax.legend()
     display(Image(data=figure_png(fig)))
 
-print("\\nSTANDARD RL GRAPHS (1,000-game training windows)")
+print("\nSTANDARD RL GRAPHS (1,000-game training windows)")
 learning_curve("Reward vs episode", "Mean terminal reward per game",
                [("Mean reward", [r["avg_reward"] for r in history], "#2563eb")])
 learning_curve("Success rate vs episode", "Wins + draws / games",
@@ -259,7 +448,7 @@ for ax, key, title, ylabel, color in zip(
     ax.set(title=title, xlabel="Training episode", ylabel=ylabel)
     ax.grid(alpha=0.25)
 axes[1].set_ylim(0, 1.05)
-print("\\nTRAINING PLOTS: reward, success rate, and steps versus episode")
+print("\nTRAINING PLOTS: reward, success rate, and steps versus episode")
 display(Image(data=figure_png(fig)))
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), constrained_layout=True)
@@ -279,7 +468,7 @@ axes[1].set(title="Best learned Q-value by human first square", ylabel="Q-value"
 for ax in axes:
     ax.set_xticks(positions, start_names, rotation=45, ha="right")
     ax.grid(axis="y", alpha=0.2)
-print("\\nOPENING GRAPHS: outcomes and best AI Q-value by human first square")
+print("\nOPENING GRAPHS: outcomes and best AI Q-value by human first square")
 display(Image(data=figure_png(fig)))
 
 fig, axes = plt.subplots(3, 3, figsize=(12, 8), sharex=True, sharey=True,
@@ -297,7 +486,7 @@ for start, ax in enumerate(axes.flat):
     if start % 3 == 0:
         ax.set_ylabel("Best legal Q")
 fig.suptitle("Best AI reply Q-value during training, by human opening")
-print("\\nQ-VALUE PROGRESS: all nine human starting squares, measured every 1,000 games")
+print("\nQ-VALUE PROGRESS: all nine human starting squares, measured every 1,000 games")
 display(Image(data=figure_png(fig)))
 
 fig, axes = plt.subplots(3, 3, figsize=(12, 8), sharex=True, sharey=True,
@@ -315,7 +504,7 @@ for start, ax in enumerate(axes.flat):
     if start % 3 == 0:
         ax.set_ylabel("AI win rate")
 fig.suptitle("AI win rate by human first square: 100 greedy games per checkpoint")
-print("\\nOPENING LEARNING CURVES: AI win rate for each human start, evaluated every 10,000 games")
+print("\nOPENING LEARNING CURVES: AI win rate for each human start, evaluated every 10,000 games")
 display(Image(data=figure_png(fig)))
 
 q_tabs = widgets.Tab(children=q_logs)
@@ -363,7 +552,7 @@ for start, ax in enumerate(axes.flat):
     if start % 3:
         ax.set_ylabel("")
 fig.suptitle("AI first decision for each human opening (green = chosen)")
-print("\\nAI DECISION GRAPHS: all nine human starting squares")
+print("\nAI DECISION GRAPHS: all nine human starting squares")
 display(Image(data=figure_png(fig)))
 
 
@@ -525,55 +714,3 @@ class NotebookTicTacToe:
 
 game = NotebookTicTacToe(agent)
 display(game.widget)
-'''
-
-
-def build():
-    code = "\n".join([
-        "# One Python cell: rules, Q-learning agent, training, results, and game.",
-        "# Part 1: board rules and training opponents.",
-        module_source("core.py"),
-        "# Part 2: Q-table, action selection, and learning update.",
-        module_source("agent.py"),
-        DEMO,
-    ])
-    compile(code, str(DESTINATION), "exec")
-    COMMENTED_CODE.write_text(code, encoding="utf-8")
-    notebook = nbf.v4.new_notebook(
-        cells=[
-            nbf.v4.new_markdown_cell(
-                "# Tic-Tac-Toe Q-learning — Python board\n\n"
-                "Run the code cell to train, inspect results, and play. "
-                "The board is on the left; the AI's decision Q-values are on the right. "
-                "Choose X or O, or press **New game**.\n\n"
-                "To explain it: **state** = board from the AI's view (0 empty, 1 AI, 2 you); "
-                "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
-                "**Q-learning** updates move values after each game turn.\n\n"
-                "Default: 160,000 training games. The cell prints an opening-state "
-                "Q-table for each human opening every 1,000 games, then a training "
-                "table, opponent evaluation, and reward, success-rate, and steps plots. "
-                "It also evaluates 1,000 games for each of the nine human opening squares, "
-                "with a Q-table, results table, and comparison graph for those openings. "
-                "The plots include five standard RL curves (reward, success, steps, "
-                "TD error, global exploration), plus Q-value and win-rate progress "
-                "and AI decisions for all nine openings. "
-                "Expand the panels for full tables and Q-table snapshots, grouped by opening. "
-                "Each AI move also updates a Q-value bar chart. "
-                "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "
-                "Requires Python 3.10+, Jupyter, `ipywidgets`, and Matplotlib."
-            ),
-            nbf.v4.new_code_cell(code),
-        ],
-        metadata={
-            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-            "language_info": {"name": "python", "version": "3.11"},
-            "colab": {"name": DESTINATION.name, "provenance": []},
-        },
-    )
-    DESTINATION.parent.mkdir(exist_ok=True)
-    nbf.write(notebook, DESTINATION)
-    print(f"{DESTINATION}: one Python code cell, {len(code):,} characters")
-
-
-if __name__ == "__main__":
-    build()
