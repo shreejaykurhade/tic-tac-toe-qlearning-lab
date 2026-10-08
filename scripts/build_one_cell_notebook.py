@@ -31,11 +31,16 @@ history = []
 window = {"wins": 0, "draws": 0, "losses": 0, "reward": 0.0, "moves": 0}
 
 def print_q_snapshot(episode):
-    # Opening-state values for X; other states remain in agent.q.
-    values = agent.values("000000000")
-    print(f"Episode {episode:,} | opening Q-table (X to move) | states: {len(agent.q)}")
+    # Keep the same human opening so checkpoints are comparable.
+    board = play(EMPTY_BOARD, 0, X)
+    values = agent.values(encode_state(board, O))
+    best = agent.greedy_actions(board, O)
+    print(f"Episode {episode:,} | human X at top-left, AI O to move | states: {len(agent.q)}")
     for row in range(0, 9, 3):
-        print("  " + " | ".join(f"{value:+.3f}" for value in values[row:row + 3]))
+        print("  " + " | ".join("   X   " if board[i] else f"{values[i]:+.3f}"
+                               for i in range(row, row + 3)))
+    print("  Best AI reply:", ", ".join(f"({i // 3 + 1},{i % 3 + 1})" for i in best),
+          f"| Q = {values[best[0]]:+.3f}")
 
 for episode in range(1, EPISODES + 1):
     agent_mark = X if episode % 2 else O
@@ -110,6 +115,49 @@ for name, weights in (("Random", (1, 0, 0)), ("Tactical", (0, 1, 0)),
         losses += result == other(agent_mark)
     print(f"{name:<10} {wins:5d} {draws:6d} {losses:7d} {(wins + draws) / 400:9.1%}")
 
+# Compare all nine human openings with the same trained AI.
+OPENING_GAMES = 1000
+start_names = ("Top-left", "Top", "Top-right", "Left", "Center",
+               "Right", "Bottom-left", "Bottom", "Bottom-right")
+opening_results = []
+print("\\nHuman starts as X; AI is O. Each opening gets 1,000 games vs random X replies.")
+print("Q is learned future return, not a win probability. X marks the occupied cell.")
+for start, name in enumerate(start_names):
+    first_board = play(EMPTY_BOARD, start, X)
+    q_values = agent.values(encode_state(first_board, O))
+    best = agent.greedy_actions(first_board, O)
+    category_rng = random.Random(SEED + 1000 + start)
+    wins = draws = losses = 0
+    for _ in range(OPENING_GAMES):
+        board = first_board
+        while not terminal(board):
+            turn = X if sum(cell != 0 for cell in board) % 2 == 0 else O
+            action = (agent.select_action(board, O, rng=category_rng) if turn == O
+                      else mixture_action(board, X, category_rng, (1, 0, 0)))
+            board = play(board, action, turn)
+        result = winner(board)
+        wins += result == O
+        draws += result == 0
+        losses += result == X
+    opening_results.append({"start": name, "best_reply": best[0],
+                            "best_q": q_values[best[0]], "wins": wins,
+                            "draws": draws, "losses": losses})
+    print(f"\\n{name}: human X at ({start // 3 + 1},{start % 3 + 1})")
+    for row in range(0, 9, 3):
+        print("  " + " | ".join("   X   " if first_board[i] else f"{q_values[i]:+.3f}"
+                               for i in range(row, row + 3)))
+    print(f"  Best AI reply: ({best[0] // 3 + 1},{best[0] % 3 + 1}), "
+          f"Q = {q_values[best[0]]:+.3f}; outcomes: {wins} W / {draws} D / {losses} L")
+
+print("\\nResults by human opening (AI perspective; 1,000 games per row)")
+print(f"{'Opening':<13} {'AI reply':>8} {'Best Q':>8} {'Wins':>6} {'Draws':>6} "
+      f"{'Losses':>6} {'Win rate':>9}")
+for row in opening_results:
+    action = row["best_reply"]
+    print(f"{row['start']:<13} {f'({action // 3 + 1},{action % 3 + 1})':>8} "
+          f"{row['best_q']:+8.3f} {row['wins']:6d} {row['draws']:6d} "
+          f"{row['losses']:6d} {row['wins'] / OPENING_GAMES:9.1%}")
+
 fig, axes = plt.subplots(1, 3, figsize=(15, 3.7), constrained_layout=True)
 xs = [row["episode"] for row in history]
 for ax, key, title, ylabel, color in zip(
@@ -123,6 +171,24 @@ for ax, key, title, ylabel, color in zip(
     ax.set(title=title, xlabel="Training episode", ylabel=ylabel)
     ax.grid(alpha=0.25)
 axes[1].set_ylim(0, 1.05)
+plt.show()
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 4.5), constrained_layout=True)
+positions = list(range(9))
+win_rates = [row["wins"] / OPENING_GAMES for row in opening_results]
+draw_rates = [row["draws"] / OPENING_GAMES for row in opening_results]
+loss_rates = [row["losses"] / OPENING_GAMES for row in opening_results]
+axes[0].bar(positions, win_rates, label="AI wins", color="#059669")
+axes[0].bar(positions, draw_rates, bottom=win_rates, label="Draws", color="#94a3b8")
+axes[0].bar(positions, loss_rates, bottom=[w + d for w, d in zip(win_rates, draw_rates)],
+            label="AI losses", color="#dc2626")
+axes[0].set(title="Outcomes by human first square", ylabel="Share of 1,000 games", ylim=(0, 1.02))
+axes[0].legend()
+axes[1].bar(positions, [row["best_q"] for row in opening_results], color="#2563eb")
+axes[1].set(title="Best learned Q-value by human first square", ylabel="Q-value")
+for ax in axes:
+    ax.set_xticks(positions, start_names, rotation=45, ha="right")
+    ax.grid(axis="y", alpha=0.2)
 plt.show()
 
 
@@ -294,8 +360,11 @@ def build():
                 "**action** = empty cell; **reward** = +1 win, +0.3 draw, -1 loss; "
                 "**Q-learning** updates move values after each game turn.\n\n"
                 "Default: 160,000 training games. The cell prints an opening-state "
-                "Q-table every 1,000 games, then a training table, opponent evaluation, "
-                "and reward, success-rate, and steps plots. Edit `EPISODES` for a shorter run. "
+                "Q-table for the top-left human opening every 1,000 games, then a training "
+                "table, opponent evaluation, and reward, success-rate, and steps plots. "
+                "It also evaluates 1,000 games for each of the nine human opening squares, "
+                "with a Q-table, results table, and comparison graph for those openings. "
+                "Edit `EPISODES` or `OPENING_GAMES` for a shorter run. "
                 "Requires Python 3.10+, Jupyter, `ipywidgets`, and Matplotlib."
             ),
             nbf.v4.new_code_cell(code),

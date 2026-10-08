@@ -6,7 +6,7 @@ The agent learns from game outcomes and selects moves from its Q-table. Minimax 
 
 ## Play in Python
 
-Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and prints the opening-state 3×3 Q-table every 1,000 games. After training, it shows a per-1,000-game results table, a final evaluation table against random, tactical, and minimax opponents, and reward, success-rate, and steps plots. The playable 3×3 board sits beside its decision Q-values at the end. Choose X or O and use **New game** to reset. The notebook contains no HTML, CSS, or JavaScript source.
+Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent and prints a 3×3 Q-table every 1,000 games for one fixed, meaningful state: human X starts at top-left and AI O is about to reply. After training, it shows a per-1,000-game results table, evaluation against random, tactical, and minimax opponents, and reward, success-rate, and steps plots. It then runs **1,000 games for each of the nine human first squares** against random X replies, with a Q-table and outcome table for each opening and graphs comparing their win/draw/loss rates and best Q-values. These 9,000 games evaluate the trained, greedy policy; they do not update it. The playable 3×3 board sits beside its decision Q-values at the end. Choose X or O and use **New game** to reset. The notebook uses Python and `ipywidgets` for the game; a small inline style keeps button text black in dark notebook themes.
 
 ```bash
 python -m pip install -r requirements.txt
