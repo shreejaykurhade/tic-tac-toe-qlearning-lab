@@ -1,12 +1,23 @@
 # Tic-Tac-Toe with Q-Learning
 
-A Reinforcement Learning Lab CA mini project: train a tabular Q-learning agent, evaluate its policy, and play against it in a polished **fully offline browser game**.
+A Reinforcement Learning Lab CA mini project: train a tabular Q-learning agent and play Tic-Tac-Toe in a **Python notebook**. The board sits on the left; the Q-values for each AI decision appear on the right.
 
-The agent learns from game outcomes. During browser play it selects moves from its saved Q-table; there is no minimax search at inference time.
+The agent learns from game outcomes and selects moves from its Q-table. Minimax is used during training, never to choose moves in the playable notebook.
+
+## Play in Python
+
+Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb) in Jupyter and run its **one Python code cell**. It trains the agent, then shows a simple 3×3 board beside a matching 3×3 Q-value panel. Choose X or O; the AI's chosen square and its action value are highlighted after every move. Use **New game** to reset. The notebook contains no HTML, CSS, or JavaScript source.
+
+```bash
+python -m pip install -r requirements.txt
+jupyter notebook notebooks/TicTacToe_All_In_One.ipynb
+```
+
+The default 160,000-game run uses the same training configuration as the project and was checked against all 627 saved canonical states. Edit `EPISODES` in the notebook for a shorter demonstration. The interface uses `ipywidgets` and runs locally with Python and Jupyter.
 
 ![Offline game with learned action values](artifacts/screenshots/offline_game_qvalues.jpg)
 
-## Play offline
+## Optional browser version
 
 1. [Download the project ZIP](https://github.com/shreejaykurhade/tic-tac-toe-qlearning-lab/archive/refs/heads/main.zip) and extract it.
 2. Double-click **`TicTacToe_Offline.html`** to open it in Chrome, Edge, Firefox, or another modern browser.
@@ -80,13 +91,13 @@ For a short demonstration, reduce `--episodes`. A shorter run can produce differ
 
 ## Notebook
 
-**Want everything in one code block?** Open [TicTacToe_All_In_One.ipynb](notebooks/TicTacToe_All_In_One.ipynb). It has one short introduction and **one executable Python cell** containing the environment, agent, training, evaluation, and the existing browser game UI. The settings are at the top of that cell. During training, it prints the **complete canonical Q-table every 1,000 games** in collapsible notebook sections. It also saves a fresh model, results, two key graphs, a standalone game, and an exact full Q-table snapshot every 100 training episodes in `one_cell_outputs/`.
+The [one-cell Python notebook](notebooks/TicTacToe_All_In_One.ipynb) is the simplest way to train and play. Its Q-value panel updates with the agent's latest decision. It keeps the game interface focused on the board and the nine action values.
 
-The full 160,000-episode run is included here: [all 1,600 Q-table snapshots](artifacts/q_table_every_100.jsonl.gz) (gzip JSON Lines, 31.7 MB) and a [checkpoint index CSV](artifacts/q_table_index_every_100.csv). Each JSON line contains `episode`, `epsilon`, and the **entire canonical Q-table** at that episode. The CSV gives the number of learned states and the nine empty-board Q-values at each checkpoint. The notebook shows readable previews of episode 100 and the final episode; its `show_q_table(episode, limit=None)` helper displays any complete saved table. The source modules and notebook are generated from the same implementation.
+The earlier run's full Q-table history remains available as [1,600 snapshots every 100 games](artifacts/q_table_every_100.jsonl.gz) and a [checkpoint CSV](artifacts/q_table_index_every_100.csv). These are separate research artifacts; the playable notebook shows only the Q-values relevant to each current decision.
 
 [Open the one-cell notebook in Colab](https://colab.research.google.com/github/shreejaykurhade/tic-tac-toe-qlearning-lab/blob/main/notebooks/TicTacToe_All_In_One.ipynb)
 
-The original notebook below offers the same project as a guided sequence of smaller cells.
+The older notebook below offers the same project as a guided sequence of smaller cells with additional graphs and a browser demonstration.
 
 Open [TicTacToe_Q_Learning.ipynb](notebooks/TicTacToe_Q_Learning.ipynb) in Jupyter and run all cells in order. It embeds the project source, creates a temporary experiment folder, trains the agent, displays metrics and plots, runs the Python tests, and embeds the complete game in an iframe.
 

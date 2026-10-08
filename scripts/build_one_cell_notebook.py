@@ -1,228 +1,204 @@
-"""Generate a single-cell notebook from the actual project implementation.
-
-This avoids a second, drifting copy of the learner while making the notebook
-entirely self-contained: it does not clone, download, or import this repository.
-"""
+"""Build the self-contained Python widget notebook from the RL source."""
 from pathlib import Path
 import re
+
 import nbformat as nbf
 
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "notebooks/TicTacToe_All_In_One.ipynb"
 
 
-def standalone_source(name: str) -> str:
-    source = (ROOT / "tictactoe" / name).read_text(encoding="utf-8")
-    # The four package modules are pasted into one namespace in dependency order.
-    source = re.sub(r"(?m)^\s*from \.(?:core|agent|evaluate) import [^\n]*\n", "\n", source)
-    if name == "train.py":
-        source = source.split('\nif __name__ == "__main__":', 1)[0]
-        replacements = {
-            "def train(config: TrainingConfig, progress: bool = True):":
-                "def train(config: TrainingConfig, progress: bool = True, snapshot_callback=None):",
-            "        total_reward += reward\n":
-                "        total_reward += reward\n"
-                "        if snapshot_callback and (episode % 100 == 0 or episode == config.episodes):\n"
-                "            snapshot_callback(episode, agent, epsilon)\n",
-            "                   progress: bool = True) -> dict:":
-                "                   progress: bool = True, snapshot_callback=None) -> dict:",
-            "    agent, history, checkpoints, elapsed = train(config, progress)":
-                "    agent, history, checkpoints, elapsed = train(config, progress, snapshot_callback)",
-        }
-        for old, new in replacements.items():
-            if source.count(old) != 1:
-                raise ValueError(f"Expected one training insertion point: {old!r}")
-            source = source.replace(old, new)
+def module_source(filename: str) -> str:
+    source = (ROOT / "tictactoe" / filename).read_text(encoding="utf-8")
+    source = re.sub(r"(?m)^from \.core import [^\n]*\n", "", source)
+    if filename == "agent.py":
+        source = source.split("    def export(", 1)[0]
     return source
 
 
+DEMO = '''
+# Train with the same reward, exploration schedule, and opponent mixture as
+# the report. Change EPISODES for a faster demonstration.
+import ipywidgets as widgets
+from IPython.display import display
+
+EPISODES = 160_000
+SEED = 42
+agent = QLearningAgent(alpha=0.15, gamma=0.97, seed=SEED)
+opponent_rng = random.Random(SEED + 1)
+opponent_weights = (0.25, 0.15, 0.60)  # random, tactical, minimax
+
+for episode in range(1, EPISODES + 1):
+    agent_mark = X if episode % 2 else O
+    board = EMPTY_BOARD
+    if agent_mark == O:
+        board = play(board, mixture_action(board, X, opponent_rng, opponent_weights), X)
+    fraction = min(1.0, (episode - 1) / max(1, EPISODES * 0.85))
+    epsilon = 1.0 + fraction * (0.03 - 1.0)
+    while True:
+        state = encode_state(board, agent_mark)
+        action = agent.select_action(board, agent_mark, epsilon)
+        board = play(board, action, agent_mark)
+        if not terminal(board):
+            opponent_mark = other(agent_mark)
+            reply = mixture_action(board, opponent_mark, opponent_rng, opponent_weights)
+            board = play(board, reply, opponent_mark)
+        done = terminal(board)
+        result = winner(board)
+        reward = ((1.0 if result == agent_mark else -1.0) if result else 0.3) if done else 0.0
+        agent.update(state, action, reward,
+                     None if done else encode_state(board, agent_mark), done)
+        if done:
+            break
+
+
+class NotebookTicTacToe:
+    def __init__(self, trained_agent):
+        self.agent = trained_agent
+        self.board = EMPTY_BOARD
+        self.human_mark = X
+        self.agent_mark = O
+        self.finished = False
+
+        self.title = widgets.Label(value="TIC TAC TOE  ·  Q-LEARNING")
+        self.status = widgets.Label()
+        self.side = widgets.ToggleButtons(
+            options=[("Play as X", X), ("Play as O", O)], value=X,
+            description="You:", style={"description_width": "initial"},
+        )
+        self.side.observe(self._change_side, names="value")
+        self.new_game = widgets.Button(description="New game", icon="refresh")
+        self.new_game.on_click(lambda _: self.reset())
+
+        self.cells = []
+        for position in range(9):
+            button = widgets.Button(
+                description="", layout=widgets.Layout(width="82px", height="82px"),
+            )
+            button.style.font_weight = "bold"
+            button.style.font_size = "28px"
+            button.on_click(lambda _, index=position: self.human_move(index))
+            self.cells.append(button)
+
+        self.q_title = widgets.Label(value="Q-values at the AI's decision")
+        self.q_state = widgets.Label(value="Make a move to see the Q-table.")
+        self.q_choice = widgets.Label(value="0 = empty · 1 = AI · 2 = you")
+        self.q_cells = [widgets.Button(
+            description="—", disabled=True,
+            layout=widgets.Layout(width="92px", height="52px"),
+        ) for _ in range(9)]
+
+        board_grid = widgets.GridBox(
+            self.cells,
+            layout=widgets.Layout(grid_template_columns="repeat(3, 82px)", grid_gap="5px"),
+        )
+        q_grid = widgets.GridBox(
+            self.q_cells,
+            layout=widgets.Layout(grid_template_columns="repeat(3, 92px)", grid_gap="5px"),
+        )
+        left = widgets.VBox([self.title, self.side, self.status, board_grid, self.new_game])
+        right = widgets.VBox([self.q_title, self.q_state, q_grid, self.q_choice])
+        self.widget = widgets.HBox(
+            [left, right],
+            layout=widgets.Layout(flex_flow="row wrap", gap="32px", align_items="flex-start"),
+        )
+        self.reset()
+
+    def _change_side(self, change):
+        if change["name"] == "value" and change["new"] in (X, O):
+            self.human_mark = change["new"]
+            self.agent_mark = other(self.human_mark)
+            self.reset()
+
+    def _draw_board(self):
+        for index, button in enumerate(self.cells):
+            mark = self.board[index]
+            button.description = "X" if mark == X else "O" if mark == O else ""
+            button.button_style = "success" if mark == X else "warning" if mark == O else ""
+            button.style.button_color = "#dff8e8" if mark == X else "#fff0df" if mark == O else "#f8fafc"
+            button.disabled = self.finished or mark != 0
+
+    def _finish_or_continue(self):
+        result = winner(self.board)
+        if result or terminal(self.board):
+            self.finished = True
+            self.status.value = (
+                "You win!" if result == self.human_mark else
+                "AI wins!" if result == self.agent_mark else "Draw!"
+            )
+        else:
+            self.status.value = "Your turn. Choose an empty square."
+        self._draw_board()
+
+    def reset(self):
+        self.board = EMPTY_BOARD
+        self.finished = False
+        self.q_state.value = "Make a move to see the Q-table."
+        self.q_choice.value = "0 = empty · 1 = AI · 2 = you"
+        for button in self.q_cells:
+            button.description = "—"
+            button.button_style = ""
+            button.style.button_color = "#f8fafc"
+        self.status.value = "Your turn. Choose an empty square."
+        self._draw_board()
+        if self.agent_mark == X:
+            self._agent_move()
+
+    def human_move(self, index):
+        if self.finished or self.board[index] != 0:
+            return
+        self.board = play(self.board, index, self.human_mark)
+        if terminal(self.board):
+            self._finish_or_continue()
+        else:
+            self._agent_move()
+
+    def _agent_move(self):
+        before = self.board
+        state = encode_state(before, self.agent_mark)
+        values = self.agent.values(state)
+        selected = self.agent.select_action(before, self.agent_mark, epsilon=0.0)
+        self.q_state.value = "State: " + state + "  (AI's view)"
+        for index, button in enumerate(self.q_cells):
+            button.description = "occupied" if before[index] != 0 else f"{values[index]:+.3f}"
+            button.button_style = "success" if index == selected else ""
+            button.style.button_color = (
+                "#c9f4dc" if index == selected else
+                "#eef2f5" if before[index] != 0 else "#f8fafc"
+            )
+        row, col = divmod(selected, 3)
+        self.q_choice.value = (
+            f"AI chose row {row + 1}, column {col + 1} · Q = {values[selected]:+.3f}"
+        )
+        self.board = play(before, selected, self.agent_mark)
+        self._finish_or_continue()
+
+
+game = NotebookTicTacToe(agent)
+display(game.widget)
+'''
+
+
 def build():
-    parts = [
-        "# TIC-TAC-TOE WITH Q-LEARNING — ONE CODE CELL\n"
-        "# Edit these settings, then run this cell once.\n"
-        "EPISODES = 160_000\n"
-        "SEED = 42\n"
-        "EVALUATION_GAMES_PER_ROLE = 2_000\n"
-        "PRINT_Q_TABLE_EVERY = 1_000\n"
-        "# Complete Q-tables are printed every 1,000 games and saved every 100.\n",
-    ]
-    for filename in ("core.py", "agent.py", "evaluate.py", "train.py"):
-        parts.append("\n# " + "=" * 76 + "\n# " + filename + "\n# " + "=" * 76 + "\n")
-        parts.append(standalone_source(filename))
-
-    parts.append("""
-# ============================================================================
-# RUN THE EXPERIMENT using the settings at the top of this cell.
-# ============================================================================
-from IPython.display import display, HTML, Image, Markdown
-import html as html_module
-import re
-import gzip
-
-OUTPUT = Path.cwd() / "one_cell_outputs"
-
-config = TrainingConfig(
-    episodes=EPISODES, seed=SEED, alpha=0.15, gamma=0.97,
-    final_games_per_role=EVALUATION_GAMES_PER_ROLE,
-)
-OUTPUT.mkdir(parents=True, exist_ok=True)
-snapshot_path = OUTPUT / "q_table_every_100.jsonl.gz"
-snapshot_index = []
-
-with gzip.open(snapshot_path, "wt", encoding="utf-8") as snapshot_file:
-    def save_q_table(episode, agent, epsilon):
-        # Full canonical Q-table at this exact training episode.
-        snapshot_file.write(json.dumps({
-            "episode": episode,
-            "epsilon": epsilon,
-            "q_table": agent.q,
-        }, separators=(",", ":")) + "\\n")
-        snapshot_index.append({
-            "episode": episode,
-            "states": len(agent.q),
-            "empty_board_q": agent.values("000000000"),
-        })
-        if episode % PRINT_Q_TABLE_EVERY == 0:
-            heading = "state      " + " ".join(f"{'Q' + str(i):>8}" for i in range(9))
-            lines = [heading]
-            for state, values in sorted(agent.q.items()):
-                lines.append(state + "  " + " ".join(f"{value:+8.3f}" for value in values))
-            # A complete Q-table for this checkpoint; collapse it for readability.
-            display(HTML(
-                f'<details style="margin:8px 0;padding:8px;border:1px solid #d3dce0;'
-                f'border-radius:8px"><summary>Q-table after {episode:,} games '
-                f'({len(agent.q):,} states)</summary><pre style="max-height:340px;'
-                f'overflow:auto;font-size:11px">'
-                + html_module.escape("\\n".join(lines)) + '</pre></details>'
-            ))
-
-    summary = run_experiment(
-        config, OUTPUT, plots=True, progress=False,
-        snapshot_callback=save_q_table,
-    )
-
-with (OUTPUT / "q_table_index_every_100.csv").open("w", newline="", encoding="utf-8") as stream:
-    writer = csv.writer(stream)
-    writer.writerow(["episode", "canonical_states"] + [f"empty_board_q{i}" for i in range(9)])
-    for item in snapshot_index:
-        writer.writerow([item["episode"], item["states"], *item["empty_board_q"]])
-
-def show_q_table(episode, limit=12):
-    # Display the saved table for one checkpoint, optionally limiting rows.
-    if episode < 100 or episode > EPISODES or (episode % 100 and episode != EPISODES):
-        raise ValueError("Choose 100, 200, ..., EPISODES")
-    record = None
-    with gzip.open(snapshot_path, "rt", encoding="utf-8") as stream:
-        for line in stream:
-            candidate = json.loads(line)
-            if candidate["episode"] == episode:
-                record = candidate
-                break
-    if record is None:
-        raise ValueError("No Q-table saved for that episode")
-    states = sorted(record["q_table"].items())
-    selected = states if limit is None else states[:limit]
-    columns = "| State (0 empty, 1 self, 2 opponent) | " + " | ".join(f"Q{i}" for i in range(9)) + " |"
-    separator = "|---|" + "---:|" * 9
-    lines = [columns, separator]
-    lines.extend("| `" + state + "` | " + " | ".join(f"{value:.3f}" for value in values) + " |"
-                 for state, values in selected)
-    display(Markdown(f"### Q-table after {episode:,} games — {len(states):,} states\\n"
-                     + "\\n".join(lines)))
-    if limit is not None and len(states) > limit:
-        print(f"Showing {limit} of {len(states)} states. Use show_q_table({episode}, limit=None) for all.")
-
-display(Markdown(
-    f"## Q-table every 100 games\\n"
-    f"Saved **{len(snapshot_index):,} full Q-table snapshots** to "
-    f"`{snapshot_path.name}`. The companion CSV tracks every checkpoint. "
-    f"The full table was also printed every {PRINT_Q_TABLE_EVERY:,} games above. "
-    "Call `show_q_table(episode, limit=None)` to inspect any exact checkpoint."
-))
-
-evaluation = summary["evaluation"]
-rows = [
-    "| Opponent | Games | Wins | Draws | Losses | Non-loss rate |",
-    "|---|---:|---:|---:|---:|---:|",
-]
-for opponent_name in ("random", "tactical", "minimax"):
-    metrics = evaluation["trained"][opponent_name]["combined"]
-    rows.append(
-        f"| {opponent_name} | {metrics['games']:,} | "
-        f"{metrics['wins']:,} | {metrics['draws']:,} | {metrics['losses']:,} | "
-        f"{metrics['non_loss_rate']:.2%} |"
-    )
-display(Markdown("## Measured evaluation\\n" + "\\n".join(rows)))
-display(Markdown(
-    f"**Canonical states:** {summary['canonical_states']:,}  ·  "
-    f"**Exported positions:** {summary['exported_states']:,}  ·  "
-    f"**Adversarial audit:** "
-    f"X loss probability {evaluation['adversarial_audit']['X']['loss_probability']:.3f}, "
-    f"O loss probability {evaluation['adversarial_audit']['O']['loss_probability']:.3f}"
-))
-for plot_name in ("reward_vs_episode.png", "success_vs_episode.png"):
-    display(Image(filename=str(OUTPUT / "plots" / plot_name)))
-
-# Build the actual offline game from this run's Q-table. The page contains all
-# CSS, JavaScript, and learned values; opening it requires only a browser.
-""")
-
-    frontend = {
-        name: (ROOT / name).read_text(encoding="utf-8")
-        for name in ("index.html", "styles.css", "app.js", "assets/favicon.svg")
-    }
-    parts.append("FRONTEND_SOURCE = " + repr(frontend) + "\n")
-    parts.append("""
-import base64
-page = FRONTEND_SOURCE["index.html"]
-css = FRONTEND_SOURCE["styles.css"]
-javascript = FRONTEND_SOURCE["app.js"]
-favicon = base64.b64encode(FRONTEND_SOURCE["assets/favicon.svg"].encode()).decode()
-page = page.replace('href="assets/favicon.svg"',
-                    'href="data:image/svg+xml;base64,' + favicon + '"')
-page = page.replace('<link rel="stylesheet" href="styles.css">',
-                    '<style>\\n' + css + '\\n</style>')
-page = re.sub(r'\\s*<script[^>]+src="artifacts/model.js"[^>]*></script>', '', page)
-page = re.sub(r'\\s*<script[^>]+src="app.js"[^>]*></script>', '', page)
-page = page.replace('href="./"', 'href="#play"')
-model_json = (OUTPUT / "q_table.json").read_text(encoding="utf-8")
-embedded_script = "window.TICTACTOE_MODEL=" + model_json + ";\\n" + javascript
-page = page.replace("</body>",
-                    "<script>\\n" + embedded_script.replace("</script", "<\\\\/script")
-                    + "\\n</script>\\n</body>")
-offline_game = OUTPUT / "TicTacToe_Offline.html"
-offline_game.write_text(page, encoding="utf-8")
-display(Markdown("## Play the trained agent\\nChoose X or O in the game below. "
-                 "Use the Q-value switch to inspect decisions. "
-                 f"The standalone file is saved at `{offline_game}`."))
-display(HTML(
-    '<iframe title="Q-learning Tic-Tac-Toe" sandbox="allow-scripts" '
-    'style="width:100%;height:1100px;border:0;border-radius:16px" srcdoc="'
-    + html_module.escape(page, quote=True) + '"></iframe>'
-))
-print("All local results:", OUTPUT)
-""")
-
-    cell_source = "\n".join(parts)
-    compile(cell_source, str(DESTINATION), "exec")
+    code = "\n".join([
+        "# One Python cell: train the Q-learning agent, then play it.",
+        module_source("core.py"),
+        module_source("agent.py"),
+        DEMO,
+    ])
+    compile(code, str(DESTINATION), "exec")
     notebook = nbf.v4.new_notebook(
         cells=[
             nbf.v4.new_markdown_cell(
-                "# Tic-Tac-Toe Q-learning — one cell\n\n"
-                "Run the code cell once to train the agent and play it in the same interface "
-                "as the offline game. Change `EPISODES` at the **top of the code cell** if you want "
-                "a shorter run. The default is 160,000 episodes.\n\n"
-                "The **complete Q-table prints after every 1,000 games** in collapsible "
-                "sections. A full Q-table snapshot is also saved every 100 episodes in "
-                "`one_cell_outputs/q_table_every_100.jsonl.gz`. The companion CSV lists every "
-                "checkpoint and the empty-board Q-values. Call "
-                "`show_q_table(episode, limit=None)` to view any exact saved checkpoint. "
-                "The interface and final model are bundled into `one_cell_outputs/TicTacToe_Offline.html`. "
-                "Python 3.10+, NumPy, Matplotlib, and Jupyter are required. No download or API key is used.\n\n"
-                "Student name: __________  ·  Roll number: __________  ·  "
-                "Division/batch: __________  ·  Date: __________"
+                "# Tic-Tac-Toe Q-learning — Python board\n\n"
+                "Run the **one code cell** below. The board appears on the left, and "
+                "the Q-values considered by the agent appear on the right after each AI move. "
+                "Choose X or O, then use **New game** to restart.\n\n"
+                "Edit `EPISODES` in the training section for a shorter run. "
+                "The default 160,000 games matches the project configuration. "
+                "Requires Python 3.10+ and `ipywidgets` in Jupyter."
             ),
-            nbf.v4.new_code_cell(cell_source),
+            nbf.v4.new_code_cell(code),
         ],
         metadata={
             "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
@@ -232,7 +208,7 @@ print("All local results:", OUTPUT)
     )
     DESTINATION.parent.mkdir(exist_ok=True)
     nbf.write(notebook, DESTINATION)
-    print(f"{DESTINATION} — {len(notebook.cells)} cells, 1 code cell, {len(cell_source):,} source characters")
+    print(f"{DESTINATION}: one Python code cell, {len(code):,} characters")
 
 
 if __name__ == "__main__":
